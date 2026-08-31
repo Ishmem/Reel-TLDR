@@ -1,0 +1,40 @@
+============================================================
+ INSTAGRAM REEL CONTENT ANALYSIS: test_reel
+============================================================
+
+📌 CONTENT TYPE:   Listicle / Resource Roundup
+🎭 DOMINANT MOOD:  Educational / Informative
+🗣️ SPOKEN SPEECH:  No / Ambient Audio Only
+
+------------------------------------------------------------
+📝 EXECUTIVE SUMMARY
+------------------------------------------------------------
+This video title card introduces a list of five AI productivity tools. It features a minimal dark blue screen with centered white text.
+
+------------------------------------------------------------
+📋 LIST FORMAT DETECTED: 5 AI Productivity Tools
+------------------------------------------------------------
+
+------------------------------------------------------------
+💡 KEY TAKEAWAYS & HIGHLIGHTS
+------------------------------------------------------------
+  • Introduces five AI productivity tools
+  • Minimalist dark blue aesthetic with white overlay text
+  • Acts as an introductory title card
+
+------------------------------------------------------------
+🔍 ON-SCREEN TEXT & GRAPHIC OCR
+------------------------------------------------------------
+  [Text] 5 AI Productivity Tools
+
+------------------------------------------------------------
+🎬 VISUAL SCENE & AESTHETIC BREAKDOWN
+------------------------------------------------------------
+Static dark blue background featuring centered white overlay text that reads '5 AI Productivity Tools'.
+
+------------------------------------------------------------
+🏷️ RECOMMENDED HASHTAGS
+------------------------------------------------------------
+#AITools #Productivity #ArtificialIntelligence #TechTips #Workflows
+
+============================================================

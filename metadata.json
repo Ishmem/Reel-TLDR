@@ -1,0 +1,6 @@
+{
+  "name": "Instagram Reel Content Analyzer",
+  "description": "AI-powered Instagram Reel video analyzer combining multimodal vision and audio synthesis to extract structured summaries, on-screen text, list items, and mood.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
