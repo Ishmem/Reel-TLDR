@@ -44,6 +44,33 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Safe API caller that prevents unhandled JSON parsing syntax errors or network drops
+  const safeApiFetch = async (url: string, init?: RequestInit): Promise<any> => {
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (netErr: any) {
+      throw new Error('Connection failed or the server is starting up. Please wait a moment and try again.');
+    }
+
+    const rawText = await response.text();
+    let parsed: any;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch (jsonErr) {
+      if (rawText.includes('<html') || rawText.includes('<!doctype') || rawText.includes('<!DOCTYPE')) {
+        throw new Error(`Server temporarily unavailable or starting up (${response.status}). Please try again or test with one of the sample presets below.`);
+      }
+      throw new Error(`Unexpected server response (${response.status}): ${rawText.slice(0, 120)}`);
+    }
+
+    if (!response.ok || parsed.status === 'FAILED') {
+      throw new Error(parsed.error || `Request failed with status ${response.status}`);
+    }
+
+    return parsed;
+  };
+
   // Single URL Submit
   const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,23 +78,23 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
 
     setErrorMessage(null);
     setIsLoading(true);
-    setStatusMessage('1/3 Downloading Reel (Instaloader with yt-dlp fallback)...');
+    setStatusMessage('1/3 Fetching Reel & analyzing media stream...');
 
     try {
-      // Step simulator for UI feedback while python runs in background
+      // Step simulator for UI feedback
       const timer1 = setTimeout(() => {
         setStatusMessage(
           provider === 'gemini'
             ? '2/3 Multimodal AI analysis (Gemini 3.7 Flash native video + audio)...'
             : '2/3 Assembling Whisper transcript + Vision frame descriptions...'
         );
-      }, 3000);
+      }, 2500);
 
       const timer2 = setTimeout(() => {
-        setStatusMessage('3/3 Extracting on-screen OCR text, list items & generating summary...');
-      }, 7000);
+        setStatusMessage('3/3 Extracting on-screen OCR text, numbered items & generating structured summary...');
+      }, 5500);
 
-      const response = await fetch('/api/analyze-reel', {
+      const data = await safeApiFetch('/api/analyze-reel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: reelUrl.trim(), provider })
@@ -75,12 +102,6 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
 
       clearTimeout(timer1);
       clearTimeout(timer2);
-
-      const data = await response.json();
-
-      if (!response.ok || data.status === 'FAILED') {
-        throw new Error(data.error || 'Failed to analyze reel.');
-      }
 
       onAnalysisComplete(data);
     } catch (err: any) {
@@ -105,16 +126,10 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
     formData.append('provider', provider);
 
     try {
-      const response = await fetch('/api/analyze-upload', {
+      const data = await safeApiFetch('/api/analyze-upload', {
         method: 'POST',
         body: formData
       });
-
-      const data = await response.json();
-
-      if (!response.ok || data.status === 'FAILED') {
-        throw new Error(data.error || 'Failed to analyze uploaded video.');
-      }
 
       onAnalysisComplete(data);
     } catch (err: any) {
@@ -143,17 +158,11 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
     setStatusMessage(`Starting batch processing for ${urls.length} reels...`);
 
     try {
-      const response = await fetch('/api/batch-analyze', {
+      const data = await safeApiFetch('/api/batch-analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ urls, provider })
       });
-
-      const data = await response.json();
-
-      if (!response.ok || data.status === 'FAILED') {
-        throw new Error(data.error || 'Batch analysis failed.');
-      }
 
       onBatchComplete(data);
     } catch (err: any) {

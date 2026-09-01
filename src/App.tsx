@@ -27,7 +27,7 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  const handleAnalysisComplete迷 = (result: AnalysisResponse) => {
+  const handleAnalysisComplete = (result: AnalysisResponse) => {
     setCurrentBatch(null);
     setCurrentResult(result);
   };
@@ -98,7 +98,7 @@ export default function App() {
             {/* Input Form Area */}
             <AnalyzerForm
               provider={provider}
-              onAnalysisComplete={handleAnalysisComplete迷}
+              onAnalysisComplete={handleAnalysisComplete}
               onBatchComplete={handleBatchComplete}
               isLoading={isLoading}
               setIsLoading={setIsLoading}

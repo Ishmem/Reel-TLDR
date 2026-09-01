@@ -6,6 +6,12 @@ import { spawn } from 'child_process';
 import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
 import { SAMPLE_REELS } from './src/data/samples.js';
+import {
+  analyzeVideoWithGemini,
+  formatAnalysisTextSummary,
+  analyzeInstagramUrl,
+  processBatchReels
+} from './src/services/geminiService.js';
 
 const upload = multer({
   dest: path.join(os.tmpdir(), 'reel_uploads'),
@@ -102,68 +108,17 @@ async function startServer() {
     const cleanUrl = url.trim();
     console.log(`[API] Received analysis request for URL: ${cleanUrl} (Provider: ${provider})`);
 
-    const outputDir = path.join(os.tmpdir(), `reel_out_${Date.now()}`);
-    fs.mkdirSync(outputDir, { recursive: true });
-
     try {
-      const startTime = Date.now();
-      const pythonResult = await runPythonCommand([
-        'reel_analyzer.py',
-        cleanUrl,
-        '--provider',
-        provider,
-        '--output-dir',
-        outputDir,
-        '--json-only'
-      ]);
-
-      const executionTime = Date.now() - startTime;
-      console.log(`[API] Python run completed with code ${pythonResult.code} in ${executionTime}ms`);
-
-      if (pythonResult.code !== 0 || !pythonResult.stdout.trim()) {
-        console.error('[API] Python execution error:', pythonResult.stderr);
-
-        // Check if it's an Instagram download blocking issue
-        let userFriendlyError = pythonResult.stderr || 'Analysis failed.';
-        if (userFriendlyError.includes('Instaloader') || userFriendlyError.includes('yt-dlp') || userFriendlyError.includes('login') || userFriendlyError.includes('HTTP Error 401') || userFriendlyError.includes('HTTP Error 429')) {
-          userFriendlyError = 'Instagram download blocked by platform rate-limits or private account security. Tip: You can test immediately using our built-in Sample Reels or upload a .mp4 video file directly!';
-        }
-
-        return res.status(500).json({
-          status: 'FAILED',
-          url: cleanUrl,
-          provider,
-          error: userFriendlyError,
-          rawError: pythonResult.stderr
-        });
-      }
-
-      try {
-        const parsed = extractJsonFromOutput(pythonResult.stdout);
-        parsed.execution_time_ms = executionTime;
-        return res.json(parsed);
-      } catch (parseErr) {
-        console.error('[API] JSON parse error:', parseErr, 'Raw output:', pythonResult.stdout);
-        return res.status(500).json({
-          status: 'FAILED',
-          error: 'Failed to parse analyzer response. Raw output: ' + (pythonResult.stdout.slice(0, 300) || 'Empty output'),
-          rawOutput: pythonResult.stdout,
-          rawError: pythonResult.stderr
-        });
-      }
+      const result = await analyzeInstagramUrl(cleanUrl, provider);
+      return res.json(result);
     } catch (err: any) {
       console.error('[API] Exception in /api/analyze-reel:', err);
       return res.status(500).json({
         status: 'FAILED',
+        url: cleanUrl,
+        provider,
         error: err.message || 'Internal server error during analysis.'
       });
-    } finally {
-      // Clean up output dir
-      try {
-        fs.rmSync(outputDir, { recursive: true, force: true });
-      } catch (e) {
-        // ignore
-      }
     }
   });
 
@@ -175,49 +130,67 @@ async function startServer() {
 
     const videoFilePath = req.file.path;
     const provider = req.body.provider || 'gemini';
+    const baseName = req.file.originalname.replace(/\.[^/.]+$/, '') || 'uploaded_video';
     console.log(`[API] Received uploaded video: ${req.file.originalname} (${req.file.size} bytes), provider: ${provider}`);
 
-    const outputDir = path.join(os.tmpdir(), `upload_out_${Date.now()}`);
-    fs.mkdirSync(outputDir, { recursive: true });
-
+    const startTime = Date.now();
     try {
-      const startTime = Date.now();
-      const pythonResult = await runPythonCommand([
-        'reel_analyzer.py',
-        '--video',
-        videoFilePath,
-        '--provider',
-        provider,
-        '--output-dir',
-        outputDir,
-        '--json-only'
-      ]);
+      if (provider === 'gemini') {
+        // Native TS Gemini 3.7 Flash Video analysis (bypasses python missing dependency constraints)
+        const analysis = await analyzeVideoWithGemini(videoFilePath, req.file.mimetype || 'video/mp4');
+        const textSummary = formatAnalysisTextSummary(analysis, baseName);
+        const executionTime = Date.now() - startTime;
 
-      const executionTime = Date.now() - startTime;
-      console.log(`[API] Upload analysis completed in ${executionTime}ms (Code: ${pythonResult.code})`);
-
-      if (pythonResult.code !== 0 || !pythonResult.stdout.trim()) {
-        return res.status(500).json({
-          status: 'FAILED',
-          provider,
-          error: pythonResult.stderr || 'Video analysis failed.',
-          rawError: pythonResult.stderr
+        return res.json({
+          status: 'SUCCESS',
+          shortcode: baseName,
+          provider: 'gemini',
+          analysis,
+          text_summary: textSummary,
+          execution_time_ms: executionTime,
+          output_files: {
+            json: `analysis_${baseName}.json`,
+            txt: `summary_${baseName}.txt`
+          }
         });
       }
 
+      // Groq / Python flow
+      const outputDir = path.join(os.tmpdir(), `upload_out_${Date.now()}`);
+      fs.mkdirSync(outputDir, { recursive: true });
+
       try {
+        const pythonResult = await runPythonCommand([
+          'reel_analyzer.py',
+          '--video',
+          videoFilePath,
+          '--provider',
+          provider,
+          '--output-dir',
+          outputDir,
+          '--json-only'
+        ]);
+
+        const executionTime = Date.now() - startTime;
+        console.log(`[API] Upload analysis completed in ${executionTime}ms (Code: ${pythonResult.code})`);
+
+        if (pythonResult.code !== 0 || !pythonResult.stdout.trim()) {
+          return res.status(500).json({
+            status: 'FAILED',
+            provider,
+            error: pythonResult.stderr || 'Video analysis failed.',
+            rawError: pythonResult.stderr
+          });
+        }
+
         const parsed = extractJsonFromOutput(pythonResult.stdout);
         parsed.execution_time_ms = executionTime;
         return res.json(parsed);
-      } catch (parseErr) {
-        return res.status(500).json({
-          status: 'FAILED',
-          error: 'Failed to parse video analysis response.',
-          rawOutput: pythonResult.stdout,
-          rawError: pythonResult.stderr
-        });
+      } finally {
+        fs.rmSync(outputDir, { recursive: true, force: true });
       }
     } catch (err: any) {
+      console.error('[API] Error in /api/analyze-upload:', err);
       return res.status(500).json({
         status: 'FAILED',
         error: err.message || 'Error processing uploaded video.'
@@ -228,7 +201,6 @@ async function startServer() {
         if (fs.existsSync(videoFilePath)) {
           fs.unlinkSync(videoFilePath);
         }
-        fs.rmSync(outputDir, { recursive: true, force: true });
       } catch (cleanErr) {
         console.error('[API] Cleanup warning:', cleanErr);
       }
@@ -258,54 +230,17 @@ async function startServer() {
 
     // Limit to max 10 reels per batch in web interface to avoid gateway timeouts
     const limitedUrls = urls.slice(0, 10);
-    const tempBatchFile = path.join(os.tmpdir(), `batch_urls_${Date.now()}.txt`);
-    fs.writeFileSync(tempBatchFile, limitedUrls.join('\n'), 'utf-8');
-
-    const outputDir = path.join(os.tmpdir(), `batch_out_${Date.now()}`);
-    fs.mkdirSync(outputDir, { recursive: true });
+    console.log(`[API] Starting batch analysis for ${limitedUrls.length} URLs (Provider: ${provider})`);
 
     try {
-      console.log(`[API] Starting batch analysis for ${limitedUrls.length} URLs (Provider: ${provider})`);
-      const pythonResult = await runPythonCommand([
-        'reel_analyzer.py',
-        '--batch',
-        tempBatchFile,
-        '--provider',
-        provider,
-        '--output-dir',
-        outputDir,
-        '--json-only'
-      ]);
-
-      if (pythonResult.code !== 0 || !pythonResult.stdout.trim()) {
-        return res.status(500).json({
-          status: 'FAILED',
-          error: pythonResult.stderr || 'Batch analysis failed.',
-          rawError: pythonResult.stderr
-        });
-      }
-
-      try {
-        const parsed = extractJsonFromOutput(pythonResult.stdout);
-        return res.json(parsed);
-      } catch (parseErr) {
-        return res.status(500).json({
-          status: 'FAILED',
-          error: 'Failed to parse batch analysis response.',
-          rawOutput: pythonResult.stdout,
-          rawError: pythonResult.stderr
-        });
-      }
+      const batchResult = await processBatchReels(limitedUrls, provider);
+      return res.json(batchResult);
     } catch (err: any) {
+      console.error('[API] Batch analysis error:', err);
       return res.status(500).json({
         status: 'FAILED',
         error: err.message || 'Error executing batch analysis.'
       });
-    } finally {
-      try {
-        if (fs.existsSync(tempBatchFile)) fs.unlinkSync(tempBatchFile);
-        fs.rmSync(outputDir, { recursive: true, force: true });
-      } catch (e) {}
     }
   });
 
@@ -326,6 +261,14 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ error: 'Could not load Python suite files: ' + err.message });
     }
+  });
+
+  // Strict JSON error fallback for any unknown API route - prevents HTML fallback on /api requests
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({
+      status: 'FAILED',
+      error: `API endpoint not found: ${req.method} ${req.originalUrl || req.url}`
+    });
   });
 
   // Vite middleware for development / static serving in production

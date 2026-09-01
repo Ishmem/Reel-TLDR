@@ -3,8 +3,17 @@ import json
 import time
 import sys
 from typing import Optional
-from google import genai
-from google.genai import types
+
+# Try importing google genai SDK if installed
+try:
+    from google import genai
+    from google.genai import types
+    HAS_GENAI = True
+except ImportError:
+    HAS_GENAI = False
+    genai = None
+    types = None
+
 from analyzer.providers.base import BaseAnalyzer
 from analyzer.schemas import ReelAnalysis
 
@@ -47,13 +56,16 @@ class GeminiAnalyzer(BaseAnalyzer):
     Natively processes both video frames and audio tracks together in one multimodal call.
     """
 
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-3.6-flash"):
+    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-3.7-flash"):
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY environment variable or argument is required for GeminiAnalyzer.")
         
+        if not HAS_GENAI:
+            raise ImportError("The 'google-genai' package is not installed in the Python environment. Run 'pip install google-genai' or use the full-stack server integration.")
+
         self.model_name = model_name
-        self.fallback_models = ["gemini-3.6-flash", "gemini-3.7-flash"]
+        self.fallback_models = ["gemini-3.7-flash", "gemini-3.1-pro-preview"]
         self.client = genai.Client(
             api_key=self.api_key,
             http_options={'headers': {'User-Agent': 'aistudio-build'}}
