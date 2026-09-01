@@ -31,8 +31,6 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'url' | 'upload' | 'batch'>('url');
   const [reelUrl, setReelUrl] = useState('');
-  const [captionText, setCaptionText] = useState('');
-  const [showCaptionInput, setShowCaptionInput] = useState(false);
   const [batchUrlsText, setBatchUrlsText] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -60,7 +58,7 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
     }
 
     if (!response.ok || parsed.status === 'FAILED') {
-      throw new Error(parsed.error || `Request failed with status ${response.status}`);
+      throw new Error(parsed?.error || `Request failed with status ${response.status}`);
     }
 
     return parsed;
@@ -73,29 +71,33 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
 
     setErrorMessage(null);
     setIsLoading(true);
-    setStatusMessage('1/3 Fetching Reel & analyzing media stream...');
+    setStatusMessage('1/3 Fetching Reel video stream via yt-dlp...');
 
     try {
       // Step simulator for UI feedback
       const timer1 = setTimeout(() => {
-        setStatusMessage('2/3 Groq Whisper audio transcription & speech analysis...');
-      }, 2000);
+        setStatusMessage('2/3 Extracting audio & running Groq Whisper transcription...');
+      }, 3000);
 
       const timer2 = setTimeout(() => {
-        setStatusMessage('3/3 Groq LLM structured extraction (list items, OCR & key takeaways)...');
-      }, 4500);
+        setStatusMessage('3/3 Groq LLM structured extraction (key points, list items & metadata)...');
+      }, 7000);
 
       const data = await safeApiFetch('/api/analyze-reel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: reelUrl.trim(),
-          caption: captionText.trim()
+          url: reelUrl.trim()
         })
       });
 
       clearTimeout(timer1);
       clearTimeout(timer2);
+
+      if (data.status === 'FAILED') {
+        setErrorMessage(data.error || 'Could not download the video from this URL. Instagram/Facebook may be blocking automated downloads, or the link may be private/expired. Try uploading the video file directly instead.');
+        return;
+      }
 
       onAnalysisComplete(data);
     } catch (err: any) {
@@ -272,33 +274,6 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
                   )}
                 </button>
               </div>
-            </div>
-
-            {/* Optional Reel Caption / Transcript Input */}
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => setShowCaptionInput(!showCaptionInput)}
-                className="text-xs text-[#818CF8] hover:text-[#A5B4FC] font-medium flex items-center gap-1.5 cursor-pointer"
-              >
-                <span>{showCaptionInput ? '▼ Hide' : '▶ Add'} Reel Caption or Spoken Transcript (Optional)</span>
-                <span className="text-[10px] text-[#8E9299]">(Helps ensure 100% grounded content extraction)</span>
-              </button>
-
-              {showCaptionInput && (
-                <div className="mt-2 space-y-1">
-                  <textarea
-                    rows={3}
-                    placeholder="Paste the reel's caption text, speech narration, or bullet points here..."
-                    value={captionText}
-                    onChange={(e) => setCaptionText(e.target.value)}
-                    className="w-full p-3 bg-[#0F1115] border border-[#2A2D35] rounded-xl text-xs text-[#E2E4E9] placeholder-[#5C616B] focus:outline-none focus:ring-2 focus:ring-[#6366F1]/30 focus:border-[#6366F1] transition-all font-mono"
-                  />
-                  <p className="text-[11px] text-[#8E9299]">
-                    When analyzing via URL, providing the caption or transcript guarantees the generated breakdown matches the exact reel.
-                  </p>
-                </div>
-              )}
             </div>
 
             {/* Guidance banner */}

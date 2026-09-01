@@ -93,18 +93,20 @@ async function startServer() {
 
   // Single Reel URL Analysis endpoint
   app.post('/api/analyze-reel', async (req, res) => {
-    const { url, caption, context } = req.body;
+    const { url } = req.body;
 
     if (!url || typeof url !== 'string' || !url.trim()) {
       return res.status(400).json({ error: 'Please provide a valid Instagram Reel URL.' });
     }
 
     const cleanUrl = url.trim();
-    const captionOrNotes = (caption || context || '').trim();
-    console.log(`[API] Received Groq analysis request for URL: ${cleanUrl} (Context provided: ${!!captionOrNotes})`);
+    console.log(`[API] Received Groq analysis request for URL: ${cleanUrl}`);
 
     try {
-      const result = await analyzeInstagramUrlWithGroq(cleanUrl, captionOrNotes);
+      const result = await analyzeInstagramUrlWithGroq(cleanUrl);
+      if (result.status === 'FAILED') {
+        return res.status(422).json(result);
+      }
       return res.json(result);
     } catch (err: any) {
       console.error('[API] Exception in /api/analyze-reel:', err);

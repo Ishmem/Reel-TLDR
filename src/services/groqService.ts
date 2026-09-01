@@ -1,4 +1,5 @@
 import { Groq } from 'groq-sdk';
+import youtubedl from 'yt-dlp-exec';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -238,33 +239,107 @@ Please perform a complete content analysis. Extract all key points, list items (
   return cleanAnalysis;
 }
 
+// Ensure yt-dlp binary is present and executable
+let binaryEnsurePromise: Promise<string | null> | null = null;
+
+async function ensureYtDlpBinary(): Promise<string | null> {
+  if (binaryEnsurePromise) return binaryEnsurePromise;
+
+  binaryEnsurePromise = (async () => {
+    const defaultBin = path.resolve(process.cwd(), 'node_modules/yt-dlp-exec/bin/yt-dlp');
+    const tmpBin = path.join(os.tmpdir(), 'yt-dlp-bin');
+
+    if (fs.existsSync(defaultBin)) {
+      try {
+        fs.chmodSync(defaultBin, 0o755);
+      } catch {}
+      return defaultBin;
+    }
+
+    if (fs.existsSync(tmpBin)) {
+      try {
+        fs.chmodSync(tmpBin, 0o755);
+      } catch {}
+      return tmpBin;
+    }
+
+    // Try executing postinstall script to download official binary
+    try {
+      const postinstallScript = path.resolve(process.cwd(), 'node_modules/yt-dlp-exec/scripts/postinstall.js');
+      if (fs.existsSync(postinstallScript)) {
+        await execAsync(`node "${postinstallScript}"`);
+        if (fs.existsSync(defaultBin)) {
+          fs.chmodSync(defaultBin, 0o755);
+          return defaultBin;
+        }
+      }
+    } catch (err: any) {
+      console.warn('[GroqService] yt-dlp postinstall run warning:', err.message);
+    }
+
+    // Direct curl download fallback if needed
+    try {
+      console.log('[GroqService] Fetching standalone yt-dlp binary...');
+      await execAsync(`curl -sL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" -o "${tmpBin}" && chmod +x "${tmpBin}"`);
+      if (fs.existsSync(tmpBin) && fs.statSync(tmpBin).size > 100000) {
+        return tmpBin;
+      }
+    } catch (curlErr: any) {
+      console.warn('[GroqService] curl standalone download warning:', curlErr.message);
+    }
+
+    return fs.existsSync(defaultBin) ? defaultBin : null;
+  })();
+
+  return binaryEnsurePromise;
+}
+
 export async function analyzeInstagramUrlWithGroq(
   url: string,
-  captionOrNotes?: string
+  _captionOrNotes?: string
 ): Promise<SingleReelResult> {
   const startTime = Date.now();
   const cleanUrl = url.trim();
   const shortcode = extractShortcode(cleanUrl);
 
-  // 1. Try downloading with yt-dlp/instaloader if available
-  const tempDir = path.join(os.tmpdir(), `reel_dl_${Date.now()}`);
+  // 1. Try downloading with yt-dlp
+  const tempDir = path.join(os.tmpdir(), `reel_dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
   let downloadedVideoPath: string | null = null;
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
   try {
     fs.mkdirSync(tempDir, { recursive: true });
-    // Attempt yt-dlp download with timeout
-    await execAsync(`yt-dlp -f "mp4" --max-filesize 50M -o "${path.join(tempDir, 'video.mp4')}" "${cleanUrl}" --no-playlist`, {
-      timeout: 20000
-    });
-    const possiblePath = path.join(tempDir, 'video.mp4');
-    if (fs.existsSync(possiblePath) && fs.statSync(possiblePath).size > 1000) {
-      downloadedVideoPath = possiblePath;
+    const outputPath = path.join(tempDir, 'video.mp4');
+
+    const binPath = await ensureYtDlpBinary();
+    const ytRunner = binPath && typeof (youtubedl as any).create === 'function'
+      ? (youtubedl as any).create(binPath)
+      : youtubedl;
+
+    // Attempt video download via bundled yt-dlp with 60-second timeout and realistic User-Agent
+    await ytRunner(
+      cleanUrl,
+      {
+        format: 'mp4',
+        maxFilesize: '50M',
+        output: outputPath,
+        noPlaylist: true,
+        userAgent
+      },
+      {
+        timeout: 60000
+      }
+    );
+
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 1000) {
+      downloadedVideoPath = outputPath;
     }
   } catch (dlErr: any) {
-    // Expected on cloud container without Instagram session cookies
-    console.log(`[GroqService] Direct download note: ${dlErr.message?.slice(0, 120)}`);
+    const errMsg = dlErr.stderr || dlErr.message || String(dlErr);
+    console.error(`[GroqService] yt-dlp download failed for ${cleanUrl}: ${errMsg.slice(0, 500)}`);
   }
 
+  // 2. If video was downloaded, run real Groq Whisper + LLM extraction
   if (downloadedVideoPath) {
     try {
       const analysis = await analyzeVideoWithGroq(downloadedVideoPath);
@@ -283,57 +358,24 @@ export async function analyzeInstagramUrlWithGroq(
         }
       };
     } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      } catch {}
     }
   }
 
-  // 3. If direct video download was blocked by Instagram anti-scraping:
-  // Use Groq LLM with provided caption/transcript or contextual grounding
-  const providedContext = captionOrNotes?.trim()
-    ? `\n\nUSER-PROVIDED REEL CAPTION / TRANSCRIPT / CONTEXT:\n"""\n${captionOrNotes.trim()}\n"""\nAnalyze this exact content faithfully.`
-    : '';
+  // Clean up temporary directory if download did not succeed
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  } catch {}
 
-  const prompt = `Instagram Reel Analysis Request:
-- Target URL: ${cleanUrl}
-- Shortcode: ${shortcode}${providedContext}
-
-Instructions:
-1. If the user provided caption, notes, or transcript above, extract the EXACT structured list items, speech takeaways, and on-screen text faithfully from that context.
-2. If this is a well-known public reel, provide the precise topic analysis, key takeaways, and relevant categorization.
-3. If minimal context is available, generate an accurate, coherent analysis framework for this shortcode without fabricating random unrelated brands.
-4. Return strictly valid JSON matching the schema.`;
-
-  const parsed = await queryGroqLLM(prompt, GROQ_SYSTEM_PROMPT);
-
-  const cleanAnalysis: ServerReelAnalysis = {
-    summary: parsed.summary || `Analysis for Instagram Reel (${shortcode}) completed.`,
-    is_list_content: Boolean(parsed.is_list_content),
-    list_title: parsed.list_title || (parsed.is_list_content ? 'Identified Key Items' : null),
-    list_items: Array.isArray(parsed.list_items) ? parsed.list_items : [],
-    key_points: Array.isArray(parsed.key_points) && parsed.key_points.length > 0 ? parsed.key_points : ['Key insight extracted from reel context.'],
-    has_speech: Boolean(parsed.has_speech),
-    spoken_content_summary: parsed.spoken_content_summary || 'Dialogue and audio content reviewed.',
-    on_screen_text: Array.isArray(parsed.on_screen_text) ? parsed.on_screen_text : [],
-    visual_description: parsed.visual_description || 'Short-form Instagram Reel format video.',
-    dominant_mood: parsed.dominant_mood || 'Informative / Engaging',
-    content_type: parsed.content_type || 'Social Media Video',
-    hashtag_suggestions: Array.isArray(parsed.hashtag_suggestions) ? parsed.hashtag_suggestions : ['reels', 'instagram', 'trending', 'content']
-  };
-
-  const textSummary = formatAnalysisTextSummary(cleanAnalysis, shortcode);
-
+  // 3. Return explicit FAILED status with clear message if download failed
   return {
-    status: 'SUCCESS',
+    status: 'FAILED',
     url: cleanUrl,
     shortcode,
     provider: 'groq',
-    analysis: cleanAnalysis,
-    text_summary: textSummary,
-    execution_time_ms: Date.now() - startTime,
-    output_files: {
-      json: `analysis_${shortcode}.json`,
-      txt: `summary_${shortcode}.txt`
-    }
+    error: 'Could not download the video from this URL. Instagram/Facebook may be blocking automated downloads, or the link may be private/expired. Try uploading the video file directly instead.'
   };
 }
 
