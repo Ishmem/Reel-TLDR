@@ -2,7 +2,6 @@ import { GoogleGenAI, Type } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { SAMPLE_REELS } from '../data/samples.js';
 
 export interface ServerReelAnalysis {
   summary: string;
@@ -97,45 +96,60 @@ async function generateContentWithRetryAndFallback(
     contents: any;
     config: any;
   },
-  candidateModels: string[] = ['gemini-3.7-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite', 'gemini-flash-latest']
+  candidateModels: string[] = ['gemini-3.7-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.1-pro-preview']
 ) {
   let lastError: any = null;
 
   for (const model of candidateModels) {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // Try up to 2 attempts per candidate model to quickly fall back to faster/available models
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        console.log(`[Gemini API] Attempting generateContent with model ${model} (attempt ${attempt + 1})...`);
+        console.log(`[Gemini API] Invoking model ${model} (attempt ${attempt + 1}/${2})...`);
         const response = await ai.models.generateContent({
           model,
           contents: params.contents,
           config: params.config,
         });
+        console.log(`[Gemini API] Success with model: ${model}`);
         return response;
       } catch (err: any) {
         lastError = err;
         const errMsg = String(err?.message || err || '');
-        const isTransient =
+        const isUnavailableOrQuota =
           errMsg.includes('503') ||
           errMsg.includes('UNAVAILABLE') ||
           errMsg.includes('high demand') ||
           errMsg.includes('429') ||
           errMsg.includes('RESOURCE_EXHAUSTED') ||
           errMsg.includes('quota') ||
+          errMsg.includes('rate limit');
+
+        const isNetworkTransient =
           errMsg.includes('timeout') ||
           errMsg.includes('FetchError') ||
-          errMsg.includes('ECONNRESET');
+          errMsg.includes('ECONNRESET') ||
+          errMsg.includes('ETIMEDOUT');
 
-        console.warn(`[Gemini API] Error on model ${model} (attempt ${attempt + 1}):`, errMsg.slice(0, 150));
+        console.warn(`[Gemini API] Model ${model} returned error: ${errMsg.slice(0, 150)}`);
 
-        if (isTransient && attempt < 2) {
-          const delayMs = (attempt + 1) * 1200 + Math.random() * 500;
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        // If it's a quota or high-demand issue, skip subsequent retries on this congested model immediately and try next candidate
+        if (isUnavailableOrQuota) {
+          break;
+        }
+
+        if (isNetworkTransient && attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
           continue;
         }
-        // If not transient or exhausted retries for this model, break and try next candidate model
+
         break;
       }
     }
+  }
+
+  const finalMsg = String(lastError?.message || lastError || '');
+  if (finalMsg.includes('quota') || finalMsg.includes('429') || finalMsg.includes('503') || finalMsg.includes('UNAVAILABLE') || finalMsg.includes('high demand')) {
+    throw new Error('Gemini API is currently experiencing peak demand or quota limits. Please try again in a few moments, or select one of the built-in preset reels.');
   }
 
   throw lastError || new Error('All Gemini model candidates failed to respond.');
@@ -323,31 +337,12 @@ async function tryFetchInstagramMedia(url: string, shortcode: string): Promise<s
 }
 
 // Deep multimodal / grounded analysis of Instagram Reel URL
-export async function analyzeInstagramUrl(url: string, provider: string = 'gemini'): Promise<SingleReelResult> {
+export async function analyzeInstagramUrl(url: string, provider: string = 'gemini', captionOrNotes?: string): Promise<SingleReelResult> {
   const startTime = Date.now();
   const cleanUrl = url.trim();
   const shortcode = extractShortcode(cleanUrl);
 
-  // 1. Check for sample presets
-  const matchedSample = SAMPLE_REELS.find(s => s.url.toLowerCase() === cleanUrl.toLowerCase() || s.id.toLowerCase() === shortcode.toLowerCase());
-  if (matchedSample) {
-    const textSummary = formatAnalysisTextSummary(matchedSample.sampleAnalysis, matchedSample.title);
-    return {
-      status: 'SUCCESS',
-      url: cleanUrl,
-      shortcode: matchedSample.id,
-      provider,
-      analysis: matchedSample.sampleAnalysis,
-      text_summary: textSummary,
-      output_files: {
-        json: `analysis_${matchedSample.id}.json`,
-        txt: `summary_${matchedSample.id}.txt`
-      },
-      execution_time_ms: Date.now() - startTime
-    };
-  }
-
-  // 2. Check for direct downloadable video stream
+  // 1. Check for direct downloadable video stream
   const directVideoUrl = await tryFetchInstagramMedia(cleanUrl, shortcode);
   if (directVideoUrl) {
     try {
@@ -382,15 +377,27 @@ export async function analyzeInstagramUrl(url: string, provider: string = 'gemin
     }
   }
 
-  // 3. Multimodal / Context-grounded analysis via Gemini
+  // 3. Grounded Context Analysis via Gemini
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY environment variable is not configured.');
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = `Analyze this Instagram Reel (URL: ${cleanUrl}, Shortcode: ${shortcode}).
-Perform an in-depth extraction of this reel's topic, spoken audio narration/transcript, on-screen text, numbered list items (if listicle format), key takeaways, visual aesthetics, dominant mood, content classification, and trending hashtags. Return strictly JSON matching the required schema.`;
+
+  const providedContext = captionOrNotes?.trim()
+    ? `\n\nUSER-PROVIDED REEL CAPTION / TRANSCRIPT / CONTEXT:\n"""\n${captionOrNotes.trim()}\n"""\nAnalyze this exact content faithfully.`
+    : '';
+
+  const prompt = `Instagram Reel Analysis Request:
+- Target URL: ${cleanUrl}
+- Shortcode: ${shortcode}${providedContext}
+
+Instructions:
+1. If user provided caption or transcript context above, extract the exact structured list items, speech takeaways, and on-screen text faithfully from that context.
+2. If this is a well-known public reel, provide the precise topic analysis, key takeaways, and relevant categorization.
+3. If minimal context is available, focus on analyzing the topic realistically without fabricating fictional specific brand names or fake step numbers that contradict the reel's subject.
+4. Return strictly JSON adhering to the schema.`;
 
   const response = await generateContentWithRetryAndFallback(
     ai,

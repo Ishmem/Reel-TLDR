@@ -5,13 +5,12 @@ import os from 'os';
 import { spawn } from 'child_process';
 import multer from 'multer';
 import { createServer as createViteServer } from 'vite';
-import { SAMPLE_REELS } from './src/data/samples.js';
 import {
-  analyzeVideoWithGemini,
+  analyzeVideoWithGroq,
   formatAnalysisTextSummary,
-  analyzeInstagramUrl,
-  processBatchReels
-} from './src/services/geminiService.js';
+  analyzeInstagramUrlWithGroq,
+  processBatchReelsWithGroq
+} from './src/services/groqService.js';
 
 const upload = multer({
   dest: path.join(os.tmpdir(), 'reel_uploads'),
@@ -86,38 +85,34 @@ async function startServer() {
   app.get('/api/health', (req, res) => {
     res.json({
       status: 'ok',
-      hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
       hasGroqKey: Boolean(process.env.GROQ_API_KEY),
+      provider: 'groq',
       timestamp: new Date().toISOString()
     });
   });
 
-  // Get pre-configured sample reels
-  app.get('/api/samples', (req, res) => {
-    res.json(SAMPLE_REELS);
-  });
-
   // Single Reel URL Analysis endpoint
   app.post('/api/analyze-reel', async (req, res) => {
-    const { url, provider = 'gemini' } = req.body;
+    const { url, caption, context } = req.body;
 
     if (!url || typeof url !== 'string' || !url.trim()) {
       return res.status(400).json({ error: 'Please provide a valid Instagram Reel URL.' });
     }
 
     const cleanUrl = url.trim();
-    console.log(`[API] Received analysis request for URL: ${cleanUrl} (Provider: ${provider})`);
+    const captionOrNotes = (caption || context || '').trim();
+    console.log(`[API] Received Groq analysis request for URL: ${cleanUrl} (Context provided: ${!!captionOrNotes})`);
 
     try {
-      const result = await analyzeInstagramUrl(cleanUrl, provider);
+      const result = await analyzeInstagramUrlWithGroq(cleanUrl, captionOrNotes);
       return res.json(result);
     } catch (err: any) {
       console.error('[API] Exception in /api/analyze-reel:', err);
       return res.status(500).json({
         status: 'FAILED',
         url: cleanUrl,
-        provider,
-        error: err.message || 'Internal server error during analysis.'
+        provider: 'groq',
+        error: err.message || 'Internal server error during Groq analysis.'
       });
     }
   });
@@ -129,71 +124,33 @@ async function startServer() {
     }
 
     const videoFilePath = req.file.path;
-    const provider = req.body.provider || 'gemini';
     const baseName = req.file.originalname.replace(/\.[^/.]+$/, '') || 'uploaded_video';
-    console.log(`[API] Received uploaded video: ${req.file.originalname} (${req.file.size} bytes), provider: ${provider}`);
+    console.log(`[API] Received uploaded video for Groq processing: ${req.file.originalname} (${req.file.size} bytes)`);
 
     const startTime = Date.now();
     try {
-      if (provider === 'gemini') {
-        // Native TS Gemini 3.7 Flash Video analysis (bypasses python missing dependency constraints)
-        const analysis = await analyzeVideoWithGemini(videoFilePath, req.file.mimetype || 'video/mp4');
-        const textSummary = formatAnalysisTextSummary(analysis, baseName);
-        const executionTime = Date.now() - startTime;
+      // Groq Whisper audio extraction & high-speed LLM analysis
+      const analysis = await analyzeVideoWithGroq(videoFilePath);
+      const textSummary = formatAnalysisTextSummary(analysis, baseName);
+      const executionTime = Date.now() - startTime;
 
-        return res.json({
-          status: 'SUCCESS',
-          shortcode: baseName,
-          provider: 'gemini',
-          analysis,
-          text_summary: textSummary,
-          execution_time_ms: executionTime,
-          output_files: {
-            json: `analysis_${baseName}.json`,
-            txt: `summary_${baseName}.txt`
-          }
-        });
-      }
-
-      // Groq / Python flow
-      const outputDir = path.join(os.tmpdir(), `upload_out_${Date.now()}`);
-      fs.mkdirSync(outputDir, { recursive: true });
-
-      try {
-        const pythonResult = await runPythonCommand([
-          'reel_analyzer.py',
-          '--video',
-          videoFilePath,
-          '--provider',
-          provider,
-          '--output-dir',
-          outputDir,
-          '--json-only'
-        ]);
-
-        const executionTime = Date.now() - startTime;
-        console.log(`[API] Upload analysis completed in ${executionTime}ms (Code: ${pythonResult.code})`);
-
-        if (pythonResult.code !== 0 || !pythonResult.stdout.trim()) {
-          return res.status(500).json({
-            status: 'FAILED',
-            provider,
-            error: pythonResult.stderr || 'Video analysis failed.',
-            rawError: pythonResult.stderr
-          });
+      return res.json({
+        status: 'SUCCESS',
+        shortcode: baseName,
+        provider: 'groq',
+        analysis,
+        text_summary: textSummary,
+        execution_time_ms: executionTime,
+        output_files: {
+          json: `analysis_${baseName}.json`,
+          txt: `summary_${baseName}.txt`
         }
-
-        const parsed = extractJsonFromOutput(pythonResult.stdout);
-        parsed.execution_time_ms = executionTime;
-        return res.json(parsed);
-      } finally {
-        fs.rmSync(outputDir, { recursive: true, force: true });
-      }
+      });
     } catch (err: any) {
       console.error('[API] Error in /api/analyze-upload:', err);
       return res.status(500).json({
         status: 'FAILED',
-        error: err.message || 'Error processing uploaded video.'
+        error: err.message || 'Error processing uploaded video with Groq.'
       });
     } finally {
       // Guaranteed cleanup of uploaded temp video file
@@ -210,7 +167,6 @@ async function startServer() {
   // Batch analysis endpoint
   app.post('/api/batch-analyze', upload.single('batchFile'), async (req, res) => {
     let urls: string[] = [];
-    const provider = req.body.provider || 'gemini';
 
     if (req.file) {
       const content = fs.readFileSync(req.file.path, 'utf-8');
@@ -230,16 +186,16 @@ async function startServer() {
 
     // Limit to max 10 reels per batch in web interface to avoid gateway timeouts
     const limitedUrls = urls.slice(0, 10);
-    console.log(`[API] Starting batch analysis for ${limitedUrls.length} URLs (Provider: ${provider})`);
+    console.log(`[API] Starting Groq batch analysis for ${limitedUrls.length} URLs`);
 
     try {
-      const batchResult = await processBatchReels(limitedUrls, provider);
+      const batchResult = await processBatchReelsWithGroq(limitedUrls);
       return res.json(batchResult);
     } catch (err: any) {
       console.error('[API] Batch analysis error:', err);
       return res.status(500).json({
         status: 'FAILED',
-        error: err.message || 'Error executing batch analysis.'
+        error: err.message || 'Error executing batch analysis with Groq.'
       });
     }
   });
@@ -247,15 +203,15 @@ async function startServer() {
   // Get Python code files for inspection or copy
   app.get('/api/python-suite', (req, res) => {
     try {
-      const files = {
+      const files: Record<string, string> = {
         'reel_analyzer.py': fs.readFileSync(path.join(process.cwd(), 'reel_analyzer.py'), 'utf-8'),
         'requirements.txt': fs.readFileSync(path.join(process.cwd(), 'requirements.txt'), 'utf-8'),
         'analyzer/schemas.py': fs.readFileSync(path.join(process.cwd(), 'analyzer', 'schemas.py'), 'utf-8'),
         'analyzer/downloader.py': fs.readFileSync(path.join(process.cwd(), 'analyzer', 'downloader.py'), 'utf-8'),
         'analyzer/pipeline.py': fs.readFileSync(path.join(process.cwd(), 'analyzer', 'pipeline.py'), 'utf-8'),
         'analyzer/formatter.py': fs.readFileSync(path.join(process.cwd(), 'analyzer', 'formatter.py'), 'utf-8'),
-        'analyzer/providers/gemini_provider.py': fs.readFileSync(path.join(process.cwd(), 'analyzer', 'providers', 'gemini_provider.py'), 'utf-8'),
-        'analyzer/providers/groq_provider.py': fs.readFileSync(path.join(process.cwd(), 'analyzer', 'providers', 'groq_provider.py'), 'utf-8')
+        'analyzer/providers/groq_provider.py': fs.readFileSync(path.join(process.cwd(), 'analyzer', 'providers', 'groq_provider.py'), 'utf-8'),
+        'analyzer/providers/gemini_provider.py': fs.readFileSync(path.join(process.cwd(), 'analyzer', 'providers', 'gemini_provider.py'), 'utf-8')
       };
       res.json(files);
     } catch (err: any) {

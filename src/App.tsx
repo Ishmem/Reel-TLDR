@@ -5,23 +5,20 @@ import { AnalysisResultView } from './components/AnalysisResultView';
 import { BatchResultView } from './components/BatchResultView';
 import { PythonSuiteViewer } from './components/PythonSuiteViewer';
 import { AnalysisResponse, BatchAnalysisResponse } from './types';
-import { Terminal, Sparkles, Video, FileText, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { Terminal, Video, ShieldCheck } from 'lucide-react';
 
 export default function App() {
-  const [provider, setProvider] = useState<'gemini' | 'groq'>('gemini');
   const [currentResult, setCurrentResult] = useState<AnalysisResponse | null>(null);
   const [currentBatch, setCurrentBatch] = useState<BatchAnalysisResponse | null>(null);
   const [activeTab, setActiveTab] = useState<'analyzer' | 'python'>('analyzer');
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
-  const [hasGeminiKey, setHasGeminiKey] = useState(true);
-  const [hasGroqKey, setHasGroqKey] = useState(false);
+  const [hasGroqKey, setHasGroqKey] = useState(true);
 
   useEffect(() => {
     fetch('/api/health')
       .then(res => res.json())
       .then(data => {
-        setHasGeminiKey(Boolean(data.hasGeminiKey));
         setHasGroqKey(Boolean(data.hasGroqKey));
       })
       .catch(() => {});
@@ -43,12 +40,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0F1115] text-[#E2E4E9] flex flex-col font-sans selection:bg-[#6366F1] selection:text-white">
+    <div className="min-h-screen bg-[#0F1115] text-[#E2E4E9] flex flex-col font-sans selection:bg-amber-500 selection:text-black">
       {/* Top Header */}
       <Header
-        provider={provider}
-        onProviderChange={setProvider}
-        hasGeminiKey={hasGeminiKey}
         hasGroqKey={hasGroqKey}
       />
 
@@ -97,7 +91,6 @@ export default function App() {
           <div className="space-y-6">
             {/* Input Form Area */}
             <AnalyzerForm
-              provider={provider}
               onAnalysisComplete={handleAnalysisComplete}
               onBatchComplete={handleBatchComplete}
               isLoading={isLoading}
@@ -135,7 +128,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <span className="font-semibold text-white">Instagram Reel Content Analyzer</span>
             <span>•</span>
-            <span>Instaloader / yt-dlp &rarr; Gemini 3.7 Flash & Groq Whisper+Vision</span>
+            <span>Groq AI Whisper Audio & High-Speed LLM Synthesis</span>
           </div>
           <div className="text-[#5C616B]">
             Structured JSON & Human-Readable TXT Summaries

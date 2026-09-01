@@ -22,9 +22,9 @@ def main():
 
     parser.add_argument(
         "-p", "--provider",
-        choices=["gemini", "groq"],
-        default="gemini",
-        help="AI Backend provider: 'gemini' (multimodal single-pass) or 'groq' (Whisper + Vision + LLM)"
+        choices=["groq", "gemini"],
+        default="groq",
+        help="AI Backend provider: 'groq' (Whisper audio transcription + fast LLM) or 'gemini'"
     )
     parser.add_argument(
         "-o", "--output-dir",
@@ -45,13 +45,13 @@ def main():
     args = parser.parse_args()
 
     # Verify API key for chosen provider
-    if args.provider == "gemini" and not os.environ.get("GEMINI_API_KEY"):
+    if args.provider == "groq" and not os.environ.get("GROQ_API_KEY"):
+        print("Error: GROQ_API_KEY environment variable is not set.", file=sys.stderr)
+        print("Please export GROQ_API_KEY='your_api_key' or configure it in your environment.", file=sys.stderr)
+        sys.exit(1)
+    elif args.provider == "gemini" and not os.environ.get("GEMINI_API_KEY"):
         print("Error: GEMINI_API_KEY environment variable is not set.", file=sys.stderr)
         print("Please export GEMINI_API_KEY='your_api_key' or configure it in your environment.", file=sys.stderr)
-        sys.exit(1)
-    elif args.provider == "groq" and not os.environ.get("GROQ_API_KEY"):
-        print("Error: GROQ_API_KEY environment variable is not set for Groq provider.", file=sys.stderr)
-        print("Please export GROQ_API_KEY='your_api_key' or configure it in your environment.", file=sys.stderr)
         sys.exit(1)
 
     pipeline = ReelAnalysisPipeline(

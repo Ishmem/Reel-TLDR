@@ -47,25 +47,7 @@ export const PythonSuiteViewer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
           <div className="p-3.5 bg-[#0F1115] rounded-lg border border-[#2A2D35]">
             <span className="text-[11px] font-bold text-[#8E9299] uppercase tracking-wider block mb-1">
-              1. Single Reel URL Analysis
-            </span>
-            <code className="text-xs font-mono text-[#A1A7B0] bg-[#16191E] px-2 py-1 rounded border border-[#2A2D35] block overflow-x-auto">
-              python3 reel_analyzer.py https://www.instagram.com/reel/Cxxxx/ --provider gemini
-            </code>
-          </div>
-
-          <div className="p-3.5 bg-[#0F1115] rounded-lg border border-[#2A2D35]">
-            <span className="text-[11px] font-bold text-[#8E9299] uppercase tracking-wider block mb-1">
-              2. Batch Process from Text File
-            </span>
-            <code className="text-xs font-mono text-[#A1A7B0] bg-[#16191E] px-2 py-1 rounded border border-[#2A2D35] block overflow-x-auto">
-              python3 reel_analyzer.py --batch urls.txt --provider gemini -o ./results
-            </code>
-          </div>
-
-          <div className="p-3.5 bg-[#0F1115] rounded-lg border border-[#2A2D35]">
-            <span className="text-[11px] font-bold text-[#8E9299] uppercase tracking-wider block mb-1">
-              3. Groq Whisper + Vision Alternative
+              1. Single Reel URL Analysis (Groq)
             </span>
             <code className="text-xs font-mono text-[#A1A7B0] bg-[#16191E] px-2 py-1 rounded border border-[#2A2D35] block overflow-x-auto">
               python3 reel_analyzer.py https://www.instagram.com/reel/Cxxxx/ --provider groq
@@ -74,10 +56,28 @@ export const PythonSuiteViewer: React.FC = () => {
 
           <div className="p-3.5 bg-[#0F1115] rounded-lg border border-[#2A2D35]">
             <span className="text-[11px] font-bold text-[#8E9299] uppercase tracking-wider block mb-1">
-              4. Direct Video File Analysis
+              2. Batch Process from Text File
             </span>
             <code className="text-xs font-mono text-[#A1A7B0] bg-[#16191E] px-2 py-1 rounded border border-[#2A2D35] block overflow-x-auto">
-              python3 reel_analyzer.py --video sample_reel.mp4 -o ./outputs
+              python3 reel_analyzer.py --batch urls.txt --provider groq -o ./results
+            </code>
+          </div>
+
+          <div className="p-3.5 bg-[#0F1115] rounded-lg border border-[#2A2D35]">
+            <span className="text-[11px] font-bold text-[#8E9299] uppercase tracking-wider block mb-1">
+              3. Custom Output Directory
+            </span>
+            <code className="text-xs font-mono text-[#A1A7B0] bg-[#16191E] px-2 py-1 rounded border border-[#2A2D35] block overflow-x-auto">
+              python3 reel_analyzer.py https://www.instagram.com/reel/Cxxxx/ -o ./my_summaries
+            </code>
+          </div>
+
+          <div className="p-3.5 bg-[#0F1115] rounded-lg border border-[#2A2D35]">
+            <span className="text-[11px] font-bold text-[#8E9299] uppercase tracking-wider block mb-1">
+              4. Direct Video File Analysis (Whisper + LLM)
+            </span>
+            <code className="text-xs font-mono text-[#A1A7B0] bg-[#16191E] px-2 py-1 rounded border border-[#2A2D35] block overflow-x-auto">
+              python3 reel_analyzer.py --video sample_reel.mp4 --provider groq -o ./outputs
             </code>
           </div>
         </div>

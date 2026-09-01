@@ -75,8 +75,8 @@ export const AnalysisResultView: React.FC<AnalysisResultViewProps> = ({ result, 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-[#2A2D35]">
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#6366F1]/15 text-[#818CF8] border border-[#6366F1]/30">
-                {result.provider === 'gemini' ? 'Gemini 3.7 Flash Multimodal' : 'Groq Whisper + Vision'}
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                Groq Whisper + LLM
               </span>
               {result.shortcode && (
                 <span className="font-mono text-xs text-[#A1A7B0] bg-[#21262E] px-2 py-0.5 rounded border border-[#2A2D35]">

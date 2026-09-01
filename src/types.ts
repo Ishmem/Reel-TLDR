@@ -18,7 +18,7 @@ export interface AnalysisResponse {
   url?: string;
   video_path?: string;
   shortcode: string;
-  provider: 'gemini' | 'groq';
+  provider?: string;
   analysis?: ReelAnalysisData;
   text_summary?: string;
   output_files?: {
@@ -40,14 +40,4 @@ export interface BatchAnalysisResponse {
     txt: string;
   };
   combined_summary_text?: string;
-}
-
-export interface SampleReel {
-  id: string;
-  title: string;
-  url: string;
-  category: string;
-  description: string;
-  mockVideoName?: string;
-  sampleAnalysis: ReelAnalysisData;
 }
