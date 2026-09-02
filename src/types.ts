@@ -9,8 +9,26 @@ export interface ReelAnalysisData {
   on_screen_text: string[];
   visual_description: string;
   dominant_mood: string;
-  content_type: string;
+  category: string;
+  content_type?: string;
   hashtag_suggestions: string[];
+}
+
+export interface SavedReel {
+  id: string;
+  url?: string;
+  shortcode: string;
+  category: string;
+  summary: string;
+  key_points: string[];
+  list_items: string[];
+  list_title?: string | null;
+  dominant_mood: string;
+  content_type?: string;
+  timestamp: number;
+  analyzed_at: string;
+  analysis?: ReelAnalysisData;
+  text_summary?: string;
 }
 
 export interface AnalysisResponse {

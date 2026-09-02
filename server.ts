@@ -93,17 +93,21 @@ async function startServer() {
 
   // Single Reel URL Analysis endpoint
   app.post('/api/analyze-reel', async (req, res) => {
-    const { url } = req.body;
+    const { url, existingCategories } = req.body;
 
     if (!url || typeof url !== 'string' || !url.trim()) {
       return res.status(400).json({ error: 'Please provide a valid Instagram Reel URL.' });
     }
 
     const cleanUrl = url.trim();
-    console.log(`[API] Received Groq analysis request for URL: ${cleanUrl}`);
+    const categoriesList = Array.isArray(existingCategories)
+      ? existingCategories.filter((c: any) => typeof c === 'string' && c.trim())
+      : undefined;
+
+    console.log(`[API] Received Groq analysis request for URL: ${cleanUrl} (Existing categories count: ${categoriesList?.length || 0})`);
 
     try {
-      const result = await analyzeInstagramUrlWithGroq(cleanUrl);
+      const result = await analyzeInstagramUrlWithGroq(cleanUrl, categoriesList);
       if (result.status === 'FAILED') {
         return res.status(422).json(result);
       }
@@ -127,12 +131,22 @@ async function startServer() {
 
     const videoFilePath = req.file.path;
     const baseName = req.file.originalname.replace(/\.[^/.]+$/, '') || 'uploaded_video';
+    let categoriesList: string[] | undefined;
+    if (req.body.existingCategories) {
+      try {
+        const parsed = typeof req.body.existingCategories === 'string' ? JSON.parse(req.body.existingCategories) : req.body.existingCategories;
+        if (Array.isArray(parsed)) {
+          categoriesList = parsed.filter((c: any) => typeof c === 'string' && c.trim());
+        }
+      } catch {}
+    }
+
     console.log(`[API] Received uploaded video for Groq processing: ${req.file.originalname} (${req.file.size} bytes)`);
 
     const startTime = Date.now();
     try {
       // Groq Whisper audio extraction & high-speed LLM analysis
-      const analysis = await analyzeVideoWithGroq(videoFilePath);
+      const analysis = await analyzeVideoWithGroq(videoFilePath, categoriesList);
       const textSummary = formatAnalysisTextSummary(analysis, baseName);
       const executionTime = Date.now() - startTime;
 
@@ -186,12 +200,22 @@ async function startServer() {
       return res.status(400).json({ error: 'No Instagram Reel URLs provided for batch processing.' });
     }
 
+    let categoriesList: string[] | undefined;
+    if (req.body.existingCategories) {
+      try {
+        const parsed = typeof req.body.existingCategories === 'string' ? JSON.parse(req.body.existingCategories) : req.body.existingCategories;
+        if (Array.isArray(parsed)) {
+          categoriesList = parsed.filter((c: any) => typeof c === 'string' && c.trim());
+        }
+      } catch {}
+    }
+
     // Limit to max 10 reels per batch in web interface to avoid gateway timeouts
     const limitedUrls = urls.slice(0, 10);
     console.log(`[API] Starting Groq batch analysis for ${limitedUrls.length} URLs`);
 
     try {
-      const batchResult = await processBatchReelsWithGroq(limitedUrls);
+      const batchResult = await processBatchReelsWithGroq(limitedUrls, categoriesList);
       return res.json(batchResult);
     } catch (err: any) {
       console.error('[API] Batch analysis error:', err);

@@ -14,7 +14,8 @@ export interface ServerReelAnalysis {
   on_screen_text: string[];
   visual_description: string;
   dominant_mood: string;
-  content_type: string;
+  category: string;
+  content_type?: string;
   hashtag_suggestions: string[];
 }
 
@@ -59,8 +60,9 @@ Extract and provide structured information adhering strictly to these requiremen
 5. Provide a comprehensive overall summary (2-4 concise sentences) explaining what the reel is actually about.
 6. Describe the visual_description (what is visually happening, aesthetics, setting, camera angles, demonstrations).
 7. Identify the dominant_mood (e.g., "High Energy / Motivational", "Humorous / Satirical", "Educational / Informative", "Calm / Aesthetic", "Urgent / Direct").
-8. Categorize the content_type (e.g., "Educational / Tutorial", "Listicle / Resource Roundup", "Comedy / Sketch", "Tech / Product Demo", "Fitness / Health", "Lifestyle / Vlog", "Finance / Wealth").
-9. Suggest 5-10 relevant and trending hashtag_suggestions without the '#' symbol.`;
+8. Return "category": A concise, human-readable topic label describing what the content is actually about (2-5 words, Title Case, e.g. "Book Recommendations", "Workout & Fitness", "Cooking", "Business & Entrepreneurship", "Self-Reflection & Mindset", "Comedy", "Travel"). If existing user library categories are listed in the prompt context, REUSE the closest matching category whenever the reel fits reasonably.
+9. Return "content_type": A short description of the content format (e.g., "Educational / Tutorial", "Listicle / Resource Roundup", "Comedy / Sketch", "Tech / Product Demo", "Fitness / Health", "Lifestyle / Vlog", "Finance / Wealth").
+10. Suggest 5-10 relevant and trending hashtag_suggestions without the '#' symbol.`;
 
 export function extractShortcode(url: string): string {
   const clean = url.trim();
@@ -178,7 +180,8 @@ export function formatAnalysisTextSummary(analysis: ServerReelAnalysis, shortcod
  INSTAGRAM REEL CONTENT ANALYSIS: ${shortcodeOrTitle}
 ============================================================
 
-📌 CONTENT TYPE:   ${analysis.content_type || 'Video'}
+🏷️ TOPIC CATEGORY: ${analysis.category || analysis.content_type || 'General'}
+📌 CONTENT TYPE:   ${analysis.content_type || analysis.category || 'Video'}
 🎭 DOMINANT MOOD:  ${analysis.dominant_mood || 'Informative'}
 🗣️ SPOKEN SPEECH:  ${analysis.has_speech ? 'Yes (Narration / Voice detected)' : 'No / Ambient Audio Only'}
 
@@ -214,7 +217,11 @@ ${hashtagsSection}
 ============================================================`;
 }
 
-export async function analyzeVideoWithGemini(filePath: string, mimeType: string = 'video/mp4'): Promise<ServerReelAnalysis> {
+export async function analyzeVideoWithGemini(
+  filePath: string,
+  mimeType: string = 'video/mp4',
+  existingCategories?: string[]
+): Promise<ServerReelAnalysis> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error('GEMINI_API_KEY environment variable is not configured.');
@@ -256,7 +263,11 @@ export async function analyzeVideoWithGemini(filePath: string, mimeType: string 
     fileDataPart = uploadRes;
   }
 
-  const prompt = 'Analyze this Instagram Reel video and extract complete audio, visual, on-screen text, list items, and summary into the requested JSON schema.';
+  const categoryContext = existingCategories && existingCategories.length > 0
+    ? `\nEXISTING CATEGORIES IN USER'S SAVED LIBRARY:\n${existingCategories.map(c => `- "${c}"`).join('\n')}\n\nIMPORTANT: If this reel reasonably fits one of the existing categories above, REUSE that exact category name to keep the library organized. Only coin a new category if none fit.`
+    : '';
+
+  const prompt = `Analyze this Instagram Reel video and extract complete audio, visual, on-screen text, list items, and summary into the requested JSON schema.${categoryContext}`;
 
   const response = await generateContentWithRetryAndFallback(
     ai,
@@ -281,6 +292,7 @@ export async function analyzeVideoWithGemini(filePath: string, mimeType: string 
             on_screen_text: { type: Type.ARRAY, items: { type: Type.STRING } },
             visual_description: { type: Type.STRING },
             dominant_mood: { type: Type.STRING },
+            category: { type: Type.STRING },
             content_type: { type: Type.STRING },
             hashtag_suggestions: { type: Type.ARRAY, items: { type: Type.STRING } }
           },
@@ -294,6 +306,7 @@ export async function analyzeVideoWithGemini(filePath: string, mimeType: string 
             'on_screen_text',
             'visual_description',
             'dominant_mood',
+            'category',
             'content_type',
             'hashtag_suggestions'
           ]
@@ -304,6 +317,14 @@ export async function analyzeVideoWithGemini(filePath: string, mimeType: string 
 
   const responseText = response.text || '{}';
   const parsed = parseJsonSafely(responseText) as ServerReelAnalysis;
+  const rawCat = (parsed.category || parsed.content_type || 'General').trim();
+  let cleanCat = rawCat;
+  if (existingCategories && existingCategories.length > 0) {
+    const matched = existingCategories.find(c => c.trim().toLowerCase() === cleanCat.toLowerCase());
+    if (matched) cleanCat = matched;
+  }
+  parsed.category = cleanCat;
+  parsed.content_type = parsed.content_type || cleanCat;
   return parsed;
 }
 
@@ -337,7 +358,12 @@ async function tryFetchInstagramMedia(url: string, shortcode: string): Promise<s
 }
 
 // Deep multimodal / grounded analysis of Instagram Reel URL
-export async function analyzeInstagramUrl(url: string, provider: string = 'gemini', captionOrNotes?: string): Promise<SingleReelResult> {
+export async function analyzeInstagramUrl(
+  url: string,
+  provider: string = 'gemini',
+  captionOrNotes?: string,
+  existingCategories?: string[]
+): Promise<SingleReelResult> {
   const startTime = Date.now();
   const cleanUrl = url.trim();
   const shortcode = extractShortcode(cleanUrl);
@@ -353,7 +379,7 @@ export async function analyzeInstagramUrl(url: string, provider: string = 'gemin
         fs.writeFileSync(tempVideoPath, Buffer.from(arrayBuf));
 
         try {
-          const analysis = await analyzeVideoWithGemini(tempVideoPath, 'video/mp4');
+          const analysis = await analyzeVideoWithGemini(tempVideoPath, 'video/mp4', existingCategories);
           const textSummary = formatAnalysisTextSummary(analysis, shortcode);
           return {
             status: 'SUCCESS',
@@ -389,9 +415,13 @@ export async function analyzeInstagramUrl(url: string, provider: string = 'gemin
     ? `\n\nUSER-PROVIDED REEL CAPTION / TRANSCRIPT / CONTEXT:\n"""\n${captionOrNotes.trim()}\n"""\nAnalyze this exact content faithfully.`
     : '';
 
+  const categoryContext = existingCategories && existingCategories.length > 0
+    ? `\nEXISTING TOPIC CATEGORIES IN USER LIBRARY:\n${existingCategories.map(c => `- "${c}"`).join('\n')}\nIf the reel topic reasonably fits one of the above categories, REUSE that exact category name.`
+    : '';
+
   const prompt = `Instagram Reel Analysis Request:
 - Target URL: ${cleanUrl}
-- Shortcode: ${shortcode}${providedContext}
+- Shortcode: ${shortcode}${providedContext}${categoryContext}
 
 Instructions:
 1. If user provided caption or transcript context above, extract the exact structured list items, speech takeaways, and on-screen text faithfully from that context.
@@ -419,6 +449,7 @@ Instructions:
             on_screen_text: { type: Type.ARRAY, items: { type: Type.STRING } },
             visual_description: { type: Type.STRING },
             dominant_mood: { type: Type.STRING },
+            category: { type: Type.STRING },
             content_type: { type: Type.STRING },
             hashtag_suggestions: { type: Type.ARRAY, items: { type: Type.STRING } }
           },
@@ -432,6 +463,7 @@ Instructions:
             'on_screen_text',
             'visual_description',
             'dominant_mood',
+            'category',
             'content_type',
             'hashtag_suggestions'
           ]
@@ -441,6 +473,15 @@ Instructions:
   );
 
   const parsed = parseJsonSafely(response.text || '{}') as ServerReelAnalysis;
+  const rawCat = (parsed.category || parsed.content_type || 'General').trim();
+  let cleanCat = rawCat;
+  if (existingCategories && existingCategories.length > 0) {
+    const matched = existingCategories.find(c => c.trim().toLowerCase() === cleanCat.toLowerCase());
+    if (matched) cleanCat = matched;
+  }
+  parsed.category = cleanCat;
+  parsed.content_type = parsed.content_type || cleanCat;
+
   const textSummary = formatAnalysisTextSummary(parsed, shortcode);
 
   return {
@@ -458,17 +499,28 @@ Instructions:
   };
 }
 
-export async function processBatchReels(urls: string[], provider: string = 'gemini'): Promise<BatchAnalysisResult> {
+export async function processBatchReels(
+  urls: string[],
+  provider: string = 'gemini',
+  existingCategories?: string[]
+): Promise<BatchAnalysisResult> {
   const results: SingleReelResult[] = [];
   let successful = 0;
   let failed = 0;
+  const currentCategories = [...(existingCategories || [])];
 
   for (const u of urls) {
     try {
-      const res = await analyzeInstagramUrl(u, provider);
+      const res = await analyzeInstagramUrl(u, provider, undefined, currentCategories);
       results.push(res);
-      if (res.status === 'SUCCESS') successful++;
-      else failed++;
+      if (res.status === 'SUCCESS') {
+        successful++;
+        if (res.analysis?.category && !currentCategories.includes(res.analysis.category)) {
+          currentCategories.push(res.analysis.category);
+        }
+      } else {
+        failed++;
+      }
     } catch (err: any) {
       failed++;
       results.push({

@@ -142,10 +142,10 @@ export const AnalysisResultView: React.FC<AnalysisResultViewProps> = ({ result, 
           <div className="p-3 bg-[#21262E] rounded-lg border border-[#2A2D35]">
             <div className="flex items-center gap-1.5 text-[#8E9299] text-xs font-medium mb-1">
               <Tag className="w-3.5 h-3.5 text-amber-400" />
-              Content Type
+              Category
             </div>
-            <div className="text-sm font-semibold text-white truncate" title={analysis.content_type}>
-              {analysis.content_type}
+            <div className="text-sm font-semibold text-white truncate" title={analysis.category || analysis.content_type}>
+              {analysis.category || analysis.content_type || 'General'}
             </div>
           </div>
 

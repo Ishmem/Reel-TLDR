@@ -11,6 +11,7 @@ import {
   FolderOpen
 } from 'lucide-react';
 import { AnalysisResponse, BatchAnalysisResponse } from '../types';
+import { getExistingCategoryNames } from '../services/historyService';
 
 interface AnalyzerFormProps {
   onAnalysisComplete: (result: AnalysisResponse) => void;
@@ -83,11 +84,13 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
         setStatusMessage('3/3 Groq LLM structured extraction (key points, list items & metadata)...');
       }, 7000);
 
+      const existingCats = getExistingCategoryNames();
       const data = await safeApiFetch('/api/analyze-reel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: reelUrl.trim()
+          url: reelUrl.trim(),
+          existingCategories: existingCats
         })
       });
 
@@ -119,6 +122,10 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
 
     const formData = new FormData();
     formData.append('video', selectedFile);
+    const existingCats = getExistingCategoryNames();
+    if (existingCats.length > 0) {
+      formData.append('existingCategories', JSON.stringify(existingCats));
+    }
 
     try {
       const data = await safeApiFetch('/api/analyze-upload', {
@@ -153,10 +160,14 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
     setStatusMessage(`Starting Groq batch processing for ${urls.length} reels...`);
 
     try {
+      const existingCats = getExistingCategoryNames();
       const data = await safeApiFetch('/api/batch-analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ urls })
+        body: JSON.stringify({
+          urls,
+          existingCategories: existingCats
+        })
       });
 
       onBatchComplete(data);

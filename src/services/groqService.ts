@@ -19,7 +19,8 @@ export interface ServerReelAnalysis {
   on_screen_text: string[];
   visual_description: string;
   dominant_mood: string;
-  content_type: string;
+  category: string;
+  content_type?: string;
   hashtag_suggestions: string[];
 }
 
@@ -184,16 +185,22 @@ Extract and return STRICTLY a valid JSON object matching this exact schema:
   "on_screen_text": ["Identified text, headings, steps, captions"],
   "visual_description": "Description of the visual presentation, setting, aesthetic, or screen demonstration",
   "dominant_mood": "e.g. High Energy / Actionable, Educational / Informative, Humorous / Satirical, Motivational",
-  "content_type": "e.g. Listicle / Resource Roundup, Educational / Tutorial, Tech Demo, Lifestyle / Vlog",
+  "category": "Short, human-readable topic label describing what the content is actually about (e.g. 'Book Recommendations', 'Workout & Fitness', 'Cooking', 'Business & Entrepreneurship', 'Self-Reflection & Mindset', 'Comedy', 'Travel')",
+  "content_type": "Format description (e.g. 'Listicle / Resource Roundup', 'Educational / Tutorial', 'Tech Demo', 'Lifestyle / Vlog')",
   "hashtag_suggestions": ["tag1", "tag2", "tag3", "tag4", "tag5"]
 }
 
 CRITICAL RULES:
-1. If the audio transcript or context has a numbered list (e.g., "1. Relume", "2. Vectorizer", "3. Krea", "First habit: ...", "Second habit: ..."), extract the exact specific named items in list_items!
-2. Do NOT invent generic placeholders like ["first item", "second item"]. Use the actual names from the content.
-3. Return ONLY valid JSON, with no markdown code fences or explanatory text outside the JSON.`;
+1. TOPIC CATEGORIZATION: "category" must be a concise, human-readable topic label (2-5 words, Title Case) representing the core subject matter (e.g., "Book Recommendations", "Workout & Fitness", "Cooking", "Business & Entrepreneurship", "Self-Reflection & Mindset", "Comedy", "Travel").
+2. If existing user categories are supplied in the prompt context, REUSE the closest matching category whenever the reel fits reasonably, so similar reels stay grouped together in the user's library.
+3. If the audio transcript or context has a numbered list (e.g., "1. Relume", "2. Vectorizer", "3. Krea", "First habit: ...", "Second habit: ..."), extract the exact specific named items in list_items!
+4. Do NOT invent generic placeholders like ["first item", "second item"]. Use the actual names from the content.
+5. Return ONLY valid JSON, with no markdown code fences or explanatory text outside the JSON.`;
 
-export async function analyzeVideoWithGroq(videoPath: string): Promise<ServerReelAnalysis> {
+export async function analyzeVideoWithGroq(
+  videoPath: string,
+  existingCategories?: string[]
+): Promise<ServerReelAnalysis> {
   let audioPath: string | null = null;
   let transcript = '';
 
@@ -210,16 +217,28 @@ export async function analyzeVideoWithGroq(videoPath: string): Promise<ServerRee
     }
   }
 
+  const categoryContext = existingCategories && existingCategories.length > 0
+    ? `\nEXISTING CATEGORIES IN USER'S SAVED LIBRARY:\n${existingCategories.map(c => `- "${c}"`).join('\n')}\n\nIMPORTANT CATEGORIZATION RULE:\n- If this reel's topic reasonably fits one of the existing categories above, REUSE that exact category name to prevent library fragmentation.\n- If and only if none of the existing categories fit, coin a new, specific, concise category (2-5 words, Title Case, e.g. "Cooking", "Book Recommendations", "Workout & Fitness", "Urban Planning & Transit").`
+    : `\nCATEGORIZATION INSTRUCTION:\n- Provide a short, human-readable topic label in "category" describing what the content is actually about (2-5 words, Title Case, e.g. "Book Recommendations", "Workout & Fitness", "Cooking", "Business & Entrepreneurship", "Self-Reflection & Mindset", "Comedy", "Travel").`;
+
   const prompt = `Here is the transcribed audio and metadata from the uploaded Instagram Reel video:
 
 AUDIO TRANSCRIPT:
 """
 ${transcript.trim() || '[No spoken audio or instrumental music only]'}
 """
+${categoryContext}
 
-Please perform a complete content analysis. Extract all key points, list items (if it's a listicle/tips format), speech summary, and structure. Return strictly JSON adhering to the schema.`;
+Please perform a complete content analysis. Extract all key points, list items (if it's a listicle/tips format), speech summary, topic category, and structure. Return strictly JSON adhering to the schema.`;
 
   const parsed = await queryGroqLLM(prompt, GROQ_SYSTEM_PROMPT);
+
+  const rawCategory = (parsed.category || parsed.content_type || 'General').trim();
+  let cleanCategory = rawCategory;
+  if (existingCategories && existingCategories.length > 0) {
+    const matched = existingCategories.find(c => c.trim().toLowerCase() === cleanCategory.toLowerCase());
+    if (matched) cleanCategory = matched;
+  }
 
   const cleanAnalysis: ServerReelAnalysis = {
     summary: parsed.summary || 'Video analysis completed.',
@@ -232,7 +251,8 @@ Please perform a complete content analysis. Extract all key points, list items (
     on_screen_text: Array.isArray(parsed.on_screen_text) ? parsed.on_screen_text : [],
     visual_description: parsed.visual_description || 'High-definition vertical video presentation.',
     dominant_mood: parsed.dominant_mood || 'Informative / Engaging',
-    content_type: parsed.content_type || (parsed.is_list_content ? 'Listicle / Resource Roundup' : 'Video Content'),
+    category: cleanCategory,
+    content_type: parsed.content_type || cleanCategory || (parsed.is_list_content ? 'Listicle / Resource Roundup' : 'Video Content'),
     hashtag_suggestions: Array.isArray(parsed.hashtag_suggestions) ? parsed.hashtag_suggestions : ['reels', 'content', 'viral', 'explore', 'trending']
   };
 
@@ -296,7 +316,7 @@ async function ensureYtDlpBinary(): Promise<string | null> {
 
 export async function analyzeInstagramUrlWithGroq(
   url: string,
-  _captionOrNotes?: string
+  existingCategories?: string[]
 ): Promise<SingleReelResult> {
   const startTime = Date.now();
   const cleanUrl = url.trim();
@@ -342,7 +362,7 @@ export async function analyzeInstagramUrlWithGroq(
   // 2. If video was downloaded, run real Groq Whisper + LLM extraction
   if (downloadedVideoPath) {
     try {
-      const analysis = await analyzeVideoWithGroq(downloadedVideoPath);
+      const analysis = await analyzeVideoWithGroq(downloadedVideoPath, existingCategories);
       const textSummary = formatAnalysisTextSummary(analysis, shortcode);
       return {
         status: 'SUCCESS',
@@ -379,17 +399,29 @@ export async function analyzeInstagramUrlWithGroq(
   };
 }
 
-export async function processBatchReelsWithGroq(urls: string[]): Promise<BatchAnalysisResult> {
+export async function processBatchReelsWithGroq(
+  urls: string[],
+  existingCategories?: string[]
+): Promise<BatchAnalysisResult> {
   const results: SingleReelResult[] = [];
   let successful = 0;
   let failed = 0;
+  const currentCategories = [...(existingCategories || [])];
 
   for (const url of urls) {
     try {
-      const result = await analyzeInstagramUrlWithGroq(url);
+      const result = await analyzeInstagramUrlWithGroq(url, currentCategories);
       results.push(result);
-      if (result.status === 'SUCCESS') successful++;
-      else failed++;
+      if (result.status === 'SUCCESS' && result.analysis?.category) {
+        successful++;
+        if (!currentCategories.includes(result.analysis.category)) {
+          currentCategories.push(result.analysis.category);
+        }
+      } else if (result.status === 'SUCCESS') {
+        successful++;
+      } else {
+        failed++;
+      }
     } catch (err: any) {
       failed++;
       results.push({
@@ -417,7 +449,7 @@ export async function processBatchReelsWithGroq(urls: string[]): Promise<BatchAn
         });
       }
       combinedSummary += `Dominant Mood: ${r.analysis.dominant_mood}\n`;
-      combinedSummary += `Category: ${r.analysis.content_type}\n`;
+      combinedSummary += `Topic Category: ${r.analysis.category || r.analysis.content_type}\n`;
     } else {
       combinedSummary += `Status: FAILED - ${r.error}\n`;
     }
@@ -443,7 +475,8 @@ export function formatAnalysisTextSummary(analysis: ServerReelAnalysis, titleOrS
   const subLine = '-'.repeat(60);
 
   let output = `${line}\n INSTAGRAM REEL CONTENT ANALYSIS: ${titleOrShortcode}\n${line}\n\n`;
-  output += `📌 CONTENT TYPE:   ${analysis.content_type}\n`;
+  output += `🏷️ TOPIC CATEGORY: ${analysis.category || analysis.content_type || 'General'}\n`;
+  output += `📌 CONTENT TYPE:   ${analysis.content_type || analysis.category || 'Video Content'}\n`;
   output += `🎭 DOMINANT MOOD:  ${analysis.dominant_mood}\n`;
   output += `🗣️ SPOKEN SPEECH:  ${analysis.has_speech ? 'Yes (Narration / Voice detected)' : 'No spoken speech detected'}\n\n`;
 
