@@ -4,12 +4,14 @@ import fs from 'fs';
 import os from 'os';
 import { spawn } from 'child_process';
 import multer from 'multer';
+import open from 'open';
 import { createServer as createViteServer } from 'vite';
 import {
   analyzeVideoWithGroq,
   formatAnalysisTextSummary,
   analyzeInstagramUrlWithGroq,
-  processBatchReelsWithGroq
+  processBatchReelsWithGroq,
+  printResolvedYtDlpBinary
 } from './src/services/groqService.js';
 
 const upload = multer({
@@ -270,6 +272,24 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Server] Instagram Reel Content Analyzer running on http://0.0.0.0:${PORT}`);
+    printResolvedYtDlpBinary();
+
+    // Auto-open default browser when not in a cloud/production environment (Render/Cloud Run have no display)
+    const isCloudEnv = Boolean(
+      process.env.K_SERVICE ||
+      process.env.RENDER ||
+      process.env.CI ||
+      process.env.DYNO ||
+      process.env.FLY_APP_NAME ||
+      process.env.RAILWAY_ENVIRONMENT
+    );
+    const shouldOpenBrowser = Boolean(process.env.PKG_STANDALONE) || (process.env.NODE_ENV !== 'production' && !isCloudEnv);
+
+    if (shouldOpenBrowser) {
+      open(`http://localhost:${PORT}`).catch(() => {
+        // Silently catch error if desktop browser/display is unavailable
+      });
+    }
   });
 }
 

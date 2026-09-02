@@ -259,15 +259,54 @@ Please perform a complete content analysis. Extract all key points, list items (
   return cleanAnalysis;
 }
 
+// Local override and binary resolution for yt-dlp
+export function getLocalYtDlpOverride(): string | null {
+  const isWindows = process.platform === 'win32';
+  const localWinBin = path.join(process.cwd(), 'bin', 'yt-dlp.exe');
+  const localUnixBin = path.join(process.cwd(), 'bin', 'yt-dlp');
+
+  if (isWindows && fs.existsSync(localWinBin)) {
+    return localWinBin;
+  }
+  if (!isWindows && fs.existsSync(localUnixBin)) {
+    try {
+      fs.chmodSync(localUnixBin, 0o755);
+    } catch {}
+    return localUnixBin;
+  }
+
+  // Cross-platform fallback check
+  if (fs.existsSync(localWinBin)) {
+    return localWinBin;
+  }
+  if (fs.existsSync(localUnixBin)) {
+    try {
+      fs.chmodSync(localUnixBin, 0o755);
+    } catch {}
+    return localUnixBin;
+  }
+
+  return null;
+}
+
 // Ensure yt-dlp binary is present and executable
 let binaryEnsurePromise: Promise<string | null> | null = null;
 
-async function ensureYtDlpBinary(): Promise<string | null> {
+export async function ensureYtDlpBinary(): Promise<string | null> {
+  const localOverride = getLocalYtDlpOverride();
+  if (localOverride) {
+    return localOverride;
+  }
+
   if (binaryEnsurePromise) return binaryEnsurePromise;
 
   binaryEnsurePromise = (async () => {
-    const defaultBin = path.resolve(process.cwd(), 'node_modules/yt-dlp-exec/bin/yt-dlp');
-    const tmpBin = path.join(os.tmpdir(), 'yt-dlp-bin');
+    const isWindows = process.platform === 'win32';
+    const defaultBin = path.resolve(
+      process.cwd(),
+      isWindows ? 'node_modules/yt-dlp-exec/bin/yt-dlp.exe' : 'node_modules/yt-dlp-exec/bin/yt-dlp'
+    );
+    const tmpBin = path.join(os.tmpdir(), isWindows ? 'yt-dlp.exe' : 'yt-dlp-bin');
 
     if (fs.existsSync(defaultBin)) {
       try {
@@ -314,6 +353,21 @@ async function ensureYtDlpBinary(): Promise<string | null> {
   return binaryEnsurePromise;
 }
 
+// Log startup binary path resolution for easy CLI / packaged .exe debugging
+export function printResolvedYtDlpBinary(): void {
+  const localOverride = getLocalYtDlpOverride();
+  if (localOverride) {
+    console.log(`[yt-dlp] Resolved active binary: "${localOverride}" (local override)`);
+  } else {
+    const isWindows = process.platform === 'win32';
+    const defaultBin = path.resolve(
+      process.cwd(),
+      isWindows ? 'node_modules/yt-dlp-exec/bin/yt-dlp.exe' : 'node_modules/yt-dlp-exec/bin/yt-dlp'
+    );
+    console.log(`[yt-dlp] Resolved active binary: "${defaultBin}" (bundled / auto-managed default)`);
+  }
+}
+
 export async function analyzeInstagramUrlWithGroq(
   url: string,
   existingCategories?: string[]
@@ -331,10 +385,21 @@ export async function analyzeInstagramUrlWithGroq(
     fs.mkdirSync(tempDir, { recursive: true });
     const outputPath = path.join(tempDir, 'video.mp4');
 
-    const binPath = await ensureYtDlpBinary();
-    const ytRunner = binPath && typeof (youtubedl as any).create === 'function'
-      ? (youtubedl as any).create(binPath)
-      : youtubedl;
+    const localOverride = getLocalYtDlpOverride();
+    let ytRunner: any;
+
+    if (localOverride) {
+      // Use local override binary directly via yt-dlp-exec create()
+      ytRunner = typeof (youtubedl as any).create === 'function'
+        ? (youtubedl as any).create(localOverride)
+        : youtubedl;
+    } else {
+      // Fall back to yt-dlp-exec's default auto-managed binary
+      const autoBin = await ensureYtDlpBinary();
+      ytRunner = autoBin && typeof (youtubedl as any).create === 'function'
+        ? (youtubedl as any).create(autoBin)
+        : youtubedl;
+    }
 
     // Attempt video download via bundled yt-dlp with 60-second timeout and realistic User-Agent
     await ytRunner(
