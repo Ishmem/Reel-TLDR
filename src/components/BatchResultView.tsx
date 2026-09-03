@@ -6,15 +6,10 @@ import {
   Download,
   Copy,
   Check,
-  ChevronDown,
-  ChevronRight,
-  ListOrdered,
-  Tag,
-  Smile,
   Layers,
   Sparkles
 } from 'lucide-react';
-import { BatchAnalysisResponse, AnalysisResponse } from '../types';
+import { BatchAnalysisResponse } from '../types';
 import { AnalysisResultView } from './AnalysisResultView';
 
 interface BatchResultViewProps {
@@ -60,58 +55,58 @@ export const BatchResultView: React.FC<BatchResultViewProps> = ({ batchData, onR
   return (
     <div className="space-y-6">
       {/* Batch Summary Header Card */}
-      <div className="bg-[#16191E] rounded-xl border border-[#2A2D35] shadow-xs p-5 md:p-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#2A2D35]">
+      <div className="bg-white rounded-2xl border-[2.5px] border-[#1A1A1A] shadow-[4px_4px_0px_#1A1A1A] p-6 md:p-7">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b-2 border-[#1A1A1A]">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#6366F1]/15 text-[#818CF8] border border-[#6366F1]/30">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#E8B94A] text-[#1A1A1A] border-2 border-[#1A1A1A] shadow-[1.5px_1.5px_0px_#1A1A1A]">
                 Batch Process Report
               </span>
-              <span className="text-xs text-[#8E9299]">
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#C8D5C0] text-[#1A1A1A] border-2 border-[#1A1A1A] shadow-[1.5px_1.5px_0px_#1A1A1A]">
                 {batchData.successful} of {batchData.total} Succeeded
               </span>
             </div>
-            <h2 className="text-xl font-bold text-white tracking-tight">
+            <h2 className="text-2xl font-bold text-[#1A1A1A] tracking-tight font-display">
               Batch Reel Analysis Summary
             </h2>
           </div>
 
-          <div className="flex items-center flex-wrap gap-2">
+          <div className="flex items-center flex-wrap gap-2.5">
             <button
               type="button"
               onClick={handleDownloadBatchSummary}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#E2E4E9] bg-[#21262E] hover:bg-[#2A2D35] rounded-lg transition-colors border border-[#3A414A] cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-[#1A1A1A] bg-white hover:bg-[#FAF7F2] rounded-xl transition-all border-2 border-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5" />
-              Download Combined .txt
+              <Download className="w-4 h-4 stroke-[2.5]" />
+              <span>Combined .txt</span>
             </button>
             <button
               type="button"
               onClick={handleDownloadBatchJson}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#E2E4E9] bg-[#21262E] hover:bg-[#2A2D35] rounded-lg transition-colors border border-[#3A414A] cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-[#1A1A1A] bg-white hover:bg-[#FAF7F2] rounded-xl transition-all border-2 border-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5" />
-              Download Combined .json
+              <Download className="w-4 h-4 stroke-[2.5]" />
+              <span>Combined .json</span>
             </button>
             <button
               type="button"
               onClick={onReset}
-              className="px-3 py-1.5 text-xs font-medium text-[#8E9299] hover:text-white hover:bg-[#21262E] rounded-lg transition-colors cursor-pointer"
+              className="px-3.5 py-2 text-xs font-bold text-[#1A1A1A] bg-[#E8B94A] hover:bg-[#d8a83a] rounded-xl transition-all border-2 border-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] cursor-pointer"
             >
               New Batch
             </button>
           </div>
         </div>
 
-        {/* View Switcher */}
-        <div className="flex items-center gap-2 mt-4">
+        {/* View Switcher Tabs (Bordered Pill Switcher) */}
+        <div className="flex items-center gap-2 mt-5 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('items')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer border-2 border-[#1A1A1A] ${
               activeTab === 'items'
-                ? 'bg-[#21262E] text-white border border-[#3A414A]'
-                : 'text-[#8E9299] hover:text-white hover:bg-[#21262E]/50'
+                ? 'bg-[#E8B94A] text-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A]'
+                : 'bg-white text-[#1A1A1A] hover:bg-[#FAF7F2] shadow-[1.5px_1.5px_0px_#1A1A1A]'
             }`}
           >
             Individual Reel Inspector ({batchData.results.length})
@@ -119,10 +114,10 @@ export const BatchResultView: React.FC<BatchResultViewProps> = ({ batchData, onR
           <button
             type="button"
             onClick={() => setActiveTab('combined')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            className={`px-4 py-2 rounded-full text-xs font-bold transition-all cursor-pointer border-2 border-[#1A1A1A] ${
               activeTab === 'combined'
-                ? 'bg-[#21262E] text-white border border-[#3A414A]'
-                : 'text-[#8E9299] hover:text-white hover:bg-[#21262E]/50'
+                ? 'bg-[#E8B94A] text-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A]'
+                : 'bg-white text-[#1A1A1A] hover:bg-[#FAF7F2] shadow-[1.5px_1.5px_0px_#1A1A1A]'
             }`}
           >
             Combined Rollup Report
@@ -132,21 +127,21 @@ export const BatchResultView: React.FC<BatchResultViewProps> = ({ batchData, onR
 
       {activeTab === 'combined' ? (
         /* Combined Rollup View */
-        <div className="bg-[#16191E] rounded-xl border border-[#2A2D35] shadow-xs p-5 md:p-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base font-semibold text-white">
+        <div className="bg-white rounded-2xl border-[2.5px] border-[#1A1A1A] shadow-[4px_4px_0px_#1A1A1A] p-6 md:p-7">
+          <div className="flex items-center justify-between mb-4 pb-4 border-b-2 border-[#1A1A1A]">
+            <h3 className="text-lg font-bold text-[#1A1A1A] font-display">
               Batch Combined Summary Text
             </h3>
             <button
               type="button"
               onClick={copyCombinedSummary}
-              className="inline-flex items-center gap-1 text-xs font-medium text-[#E2E4E9] hover:text-white bg-[#21262E] hover:bg-[#2A2D35] px-3 py-1.5 rounded-lg border border-[#3A414A] cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#1A1A1A] bg-white hover:bg-[#FAF7F2] px-3.5 py-2 rounded-xl border-2 border-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] cursor-pointer transition-all"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-[#10B981]" /> : <Copy className="w-3.5 h-3.5" />}
-              {copied ? 'Copied' : 'Copy Text'}
+              {copied ? <Check className="w-4 h-4 stroke-[2.5]" /> : <Copy className="w-4 h-4 stroke-[2.5]" />}
+              <span>{copied ? 'Copied' : 'Copy Text'}</span>
             </button>
           </div>
-          <pre className="p-4 bg-[#0F1115] border border-[#2A2D35] text-[#A1A7B0] rounded-lg text-xs font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto">
+          <pre className="p-5 bg-[#FAF7F2] border-2 border-[#1A1A1A] text-[#1A1A1A] rounded-xl text-xs font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto shadow-[2px_2px_0px_#1A1A1A]">
             {batchData.combined_summary_text || 'No combined text available.'}
           </pre>
         </div>
@@ -154,48 +149,50 @@ export const BatchResultView: React.FC<BatchResultViewProps> = ({ batchData, onR
         /* Individual List & Inspector */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: List of Reels (4 cols) */}
-          <div className="lg:col-span-4 space-y-2">
-            <h3 className="text-xs font-semibold text-[#8E9299] uppercase tracking-wider px-1">
+          <div className="lg:col-span-4 space-y-3">
+            <h3 className="text-xs font-bold text-[#1A1A1A] uppercase tracking-wider px-1 font-display">
               Processed Reels ({batchData.results.length})
             </h3>
-            {batchData.results.map((item, idx) => {
-              const isSelected = selectedReelIndex === idx;
-              const isSuccess = item.status === 'SUCCESS';
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setSelectedReelIndex(idx)}
-                  className={`w-full text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-[#21262E] text-white border-[#6366F1] shadow-sm'
-                      : 'bg-[#16191E] text-[#E2E4E9] border-[#2A2D35] hover:border-[#3A414A] hover:bg-[#21262E]/50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-1.5">
-                      {isSuccess ? (
-                        <CheckCircle2 className="w-4 h-4 text-[#10B981]" />
-                      ) : (
-                        <XCircle className="w-4 h-4 text-rose-400" />
+            <div className="space-y-2.5">
+              {batchData.results.map((item, idx) => {
+                const isSelected = selectedReelIndex === idx;
+                const isSuccess = item.status === 'SUCCESS';
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedReelIndex(idx)}
+                    className={`w-full text-left p-4 rounded-xl border-2 border-[#1A1A1A] transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#E8B94A] text-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] translate-x-[-1px] translate-y-[-1px]'
+                        : 'bg-white text-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] hover:bg-[#FAF7F2] hover:shadow-[3px_3px_0px_#1A1A1A]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        {isSuccess ? (
+                          <CheckCircle2 className="w-4 h-4 stroke-[2.5]" />
+                        ) : (
+                          <XCircle className="w-4 h-4 stroke-[2.5]" />
+                        )}
+                        <span className="font-bold text-xs truncate max-w-[140px] text-[#1A1A1A]">
+                          Reel #{idx + 1}
+                        </span>
+                      </div>
+                      {item.shortcode && (
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded border border-[#1A1A1A] font-bold ${isSelected ? 'bg-white text-[#1A1A1A]' : 'bg-[#FAF7F2] text-[#1A1A1A]'}`}>
+                          {item.shortcode}
+                        </span>
                       )}
-                      <span className="font-semibold text-xs truncate max-w-[140px] text-white">
-                        Reel #{idx + 1}
-                      </span>
                     </div>
-                    {item.shortcode && (
-                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${isSelected ? 'bg-[#0F1115] text-[#818CF8] border border-[#6366F1]/30' : 'bg-[#21262E] text-[#8E9299] border border-[#2A2D35]'}`}>
-                        {item.shortcode}
-                      </span>
-                    )}
-                  </div>
 
-                  <p className={`text-xs line-clamp-2 ${isSelected ? 'text-[#E2E4E9]' : 'text-[#8E9299]'}`}>
-                    {item.analysis?.summary || item.error || item.url}
-                  </p>
-                </button>
-              );
-            })}
+                    <p className="text-xs line-clamp-2 text-[#1A1A1A] font-medium">
+                      {item.analysis?.summary || item.error || item.url}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Right Column: Selected Reel Inspector (8 cols) */}
@@ -204,16 +201,16 @@ export const BatchResultView: React.FC<BatchResultViewProps> = ({ batchData, onR
               batchData.results[selectedReelIndex].status === 'SUCCESS' ? (
                 <AnalysisResultView result={batchData.results[selectedReelIndex]} />
               ) : (
-                <div className="bg-[#16191E] rounded-xl border border-[#2A2D35] p-6 text-center">
-                  <XCircle className="w-10 h-10 text-rose-400 mx-auto mb-2" />
-                  <h3 className="text-base font-semibold text-white">Analysis Failed for this Reel</h3>
-                  <p className="text-xs text-[#8E9299] mt-1 max-w-md mx-auto">
+                <div className="bg-white rounded-2xl border-[2.5px] border-[#1A1A1A] shadow-[4px_4px_0px_#1A1A1A] p-8 text-center">
+                  <XCircle className="w-12 h-12 stroke-[2.5] mx-auto mb-3" />
+                  <h3 className="text-lg font-bold text-[#1A1A1A] font-display">Analysis Failed for this Reel</h3>
+                  <p className="text-xs text-[#555] font-medium mt-1 max-w-md mx-auto">
                     {batchData.results[selectedReelIndex].error || 'Could not process reel video.'}
                   </p>
                 </div>
               )
             ) : (
-              <div className="bg-[#16191E] rounded-xl border border-[#2A2D35] p-8 text-center text-[#8E9299]">
+              <div className="bg-white rounded-2xl border-[2.5px] border-[#1A1A1A] shadow-[4px_4px_0px_#1A1A1A] p-8 text-center text-[#555] font-medium">
                 Select a reel from the list to view its full multimodal analysis.
               </div>
             )}

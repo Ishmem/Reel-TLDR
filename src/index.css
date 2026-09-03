@@ -1,8 +1,360 @@
 @import "tailwindcss";
 
+:root {
+  /* Light Mode Palette */
+  --bg-canvas: #F5F1E8;
+  --bg-card: #FFFFFF;
+  --bg-card-subtle: #FAF7F2;
+  --bg-input: #FAF7F2;
+  
+  --text-main: #1A1A1A;
+  --text-muted: #555555;
+  --text-dim: #777777;
+  
+  --border-color: #1A1A1A;
+  --shadow-color: #1A1A1A;
+  
+  --accent-gold: #E8B94A;
+  --accent-gold-hover: #D8A83A;
+
+  --accent-pink: #F5C6D6;
+  --accent-pink-hover: #E0B2C2;
+
+  --accent-sage: #C8D5C0;
+  --accent-sage-hover: #B5C4AC;
+
+  --accent-blue: #B8D8E8;
+
+  --btn-dark-bg: #1A1A1A;
+  --btn-dark-text: #FFFFFF;
+}
+
+:root.dark,
+.dark {
+  /* Dark Mode Palette (muted, not pure black) */
+  color-scheme: dark;
+  --bg-canvas: #221F1C;
+  --bg-card: #2C2924;
+  --bg-card-subtle: #25221E;
+  --bg-input: #25221E;
+  
+  --text-main: #F5F1E8;
+  --text-muted: #C5BFB5;
+  --text-dim: #9E968B;
+  
+  --border-color: #F5F1E8;
+  --shadow-color: #0D0C0A;
+  
+  --accent-gold: #B8862F;
+  --accent-gold-hover: #9E7225;
+
+  --accent-pink: #A9707D;
+  --accent-pink-hover: #925D69;
+
+  --accent-sage: #5C6B54;
+  --accent-sage-hover: #4D5A46;
+
+  --accent-blue: #4A6372;
+
+  --btn-dark-bg: #B8862F;
+  --btn-dark-text: #221F1C;
+}
+
+@theme {
+  --color-canvas: var(--bg-canvas);
+  --color-card: var(--bg-card);
+  --color-card-subtle: var(--bg-card-subtle);
+  --color-input: var(--bg-input);
+
+  --color-main: var(--text-main);
+  --color-muted: var(--text-muted);
+  --color-dim: var(--text-dim);
+
+  --color-border: var(--border-color);
+  
+  --color-gold: var(--accent-gold);
+  --color-gold-hover: var(--accent-gold-hover);
+
+  --color-pink: var(--accent-pink);
+  --color-pink-hover: var(--accent-pink-hover);
+
+  --color-sage: var(--accent-sage);
+  --color-sage-hover: var(--accent-sage-hover);
+
+  --color-blue: var(--accent-blue);
+
+  --color-btn-dark: var(--btn-dark-bg);
+  --color-btn-dark-text: var(--btn-dark-text);
+
+  --font-display: "Space Grotesk", system-ui, -apple-system, sans-serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --shadow-brutal: 4px 4px 0px var(--shadow-color);
+  --shadow-brutal-sm: 2px 2px 0px var(--shadow-color);
+  --shadow-brutal-md: 3px 3px 0px var(--shadow-color);
+  --shadow-brutal-lg: 6px 6px 0px var(--shadow-color);
+  --shadow-brutal-xs: 1.5px 1.5px 0px var(--shadow-color);
+  --shadow-brutal-header: 0 2px 0 var(--shadow-color);
+  --shadow-brutal-footer: 0 -2px 0 var(--shadow-color);
+}
+
 @layer base {
   body {
-    background-color: #0F1115;
-    color: #E2E4E9;
+    background-color: var(--bg-canvas);
+    color: var(--text-main);
+    font-family: var(--font-sans);
+    letter-spacing: -0.01em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--text-main);
+  }
+
+  ::selection {
+    background-color: var(--accent-gold);
+    color: var(--text-main);
   }
 }
+
+/* Neubrutalist utility classes */
+.brutal-card {
+  background-color: var(--bg-card);
+  border: 2.5px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 4px 4px 0px var(--shadow-color);
+}
+
+.brutal-card-cream {
+  background-color: var(--bg-card-subtle);
+  border: 2.5px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 4px 4px 0px var(--shadow-color);
+}
+
+.brutal-card-yellow {
+  background-color: var(--accent-gold);
+  border: 2.5px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 4px 4px 0px var(--shadow-color);
+}
+
+.brutal-card-pink {
+  background-color: var(--accent-pink);
+  border: 2.5px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 4px 4px 0px var(--shadow-color);
+}
+
+.brutal-card-sage {
+  background-color: var(--accent-sage);
+  border: 2.5px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 4px 4px 0px var(--shadow-color);
+}
+
+.brutal-btn-primary {
+  background-color: var(--btn-dark-bg);
+  color: var(--btn-dark-text);
+  border: 2px solid var(--border-color);
+  border-radius: 9999px;
+  box-shadow: 3px 3px 0px var(--shadow-color);
+  font-weight: 700;
+  transition: all 0.12s ease;
+}
+.brutal-btn-primary:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--shadow-color);
+}
+.brutal-btn-primary:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--shadow-color);
+}
+
+.brutal-btn-secondary {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  border: 2px solid var(--border-color);
+  border-radius: 9999px;
+  box-shadow: 3px 3px 0px var(--shadow-color);
+  font-weight: 700;
+  transition: all 0.12s ease;
+}
+.brutal-btn-secondary:hover:not(:disabled) {
+  background-color: var(--bg-canvas);
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--shadow-color);
+}
+.brutal-btn-secondary:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--shadow-color);
+}
+
+.brutal-btn-yellow {
+  background-color: var(--accent-gold);
+  color: var(--text-main);
+  border: 2px solid var(--border-color);
+  border-radius: 9999px;
+  box-shadow: 3px 3px 0px var(--shadow-color);
+  font-weight: 700;
+  transition: all 0.12s ease;
+}
+.brutal-btn-yellow:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px var(--shadow-color);
+}
+.brutal-btn-yellow:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0px var(--shadow-color);
+}
+
+.brutal-badge {
+  border: 2px solid var(--border-color);
+  box-shadow: 2px 2px 0px var(--shadow-color);
+  font-weight: 700;
+  border-radius: 9999px;
+}
+
+/* Comprehensive fallback rules so all components inherit the dark palette automatically */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: var(--bg-card-subtle) !important;
+  color: var(--text-main) !important;
+  border-color: var(--border-color) !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--text-dim) !important;
+}
+
+.dark [class*="border-[#1A1A1A]"] {
+  border-color: var(--border-color) !important;
+}
+
+.dark [class*="shadow-[4px_4px_0px_#1A1A1A]"] {
+  box-shadow: 4px 4px 0px var(--shadow-color) !important;
+}
+
+.dark [class*="shadow-[3px_3px_0px_#1A1A1A]"] {
+  box-shadow: 3px 3px 0px var(--shadow-color) !important;
+}
+
+.dark [class*="shadow-[2px_2px_0px_#1A1A1A]"] {
+  box-shadow: 2px 2px 0px var(--shadow-color) !important;
+}
+
+.dark [class*="shadow-[1.5px_1.5px_0px_#1A1A1A]"],
+.dark [class*="shadow-[1px_1px_0px_#1A1A1A]"] {
+  box-shadow: 1.5px 1.5px 0px var(--shadow-color) !important;
+}
+
+.dark [class*="shadow-[0_2px_0_#1A1A1A]"] {
+  box-shadow: 0 2px 0 var(--shadow-color) !important;
+}
+
+.dark [class*="shadow-[0_-2px_0_#1A1A1A]"] {
+  box-shadow: 0 -2px 0 var(--shadow-color) !important;
+}
+
+.dark [class*="hover:shadow-[4px_4px_0px_#1A1A1A]"]:hover {
+  box-shadow: 4px 4px 0px var(--shadow-color) !important;
+}
+
+.dark [class*="hover:shadow-[3px_3px_0px_#1A1A1A]"]:hover {
+  box-shadow: 3px 3px 0px var(--shadow-color) !important;
+}
+
+.dark [class*="text-[#1A1A1A]"] {
+  color: var(--text-main) !important;
+}
+
+.dark [class*="text-[#4A4A4A]"],
+.dark [class*="text-[#555]"],
+.dark [class*="text-[#666]"],
+.dark [class*="text-[#333]"] {
+  color: var(--text-muted) !important;
+}
+
+.dark [class*="text-[#777]"] {
+  color: var(--text-dim) !important;
+}
+
+.dark [class*="bg-[#F5F1E8]"] {
+  background-color: var(--bg-canvas) !important;
+}
+
+.dark [class*="bg-[#FAF7F2]"] {
+  background-color: var(--bg-card-subtle) !important;
+}
+
+.dark [class*="bg-white"] {
+  background-color: var(--bg-card) !important;
+}
+
+.dark [class*="hover:bg-white"]:hover {
+  background-color: var(--bg-card) !important;
+}
+
+.dark [class*="hover:bg-[#FAF7F2]"]:hover,
+.dark [class*="hover:bg-[#F5F1E8]"]:hover {
+  background-color: var(--bg-card-subtle) !important;
+}
+
+.dark [class*="bg-[#E8B94A]"] {
+  background-color: var(--accent-gold) !important;
+}
+
+.dark [class*="hover:bg-[#E8B94A]"]:hover,
+.dark [class*="hover:bg-[#d8a83a]"]:hover {
+  background-color: var(--accent-gold-hover) !important;
+}
+
+.dark [class*="bg-[#F5C6D6]"] {
+  background-color: var(--accent-pink) !important;
+}
+
+.dark [class*="hover:bg-[#F5C6D6]"]:hover,
+.dark [class*="hover:bg-[#e0b2c2]"]:hover {
+  background-color: var(--accent-pink-hover) !important;
+}
+
+.dark [class*="bg-[#C8D5C0]"] {
+  background-color: var(--accent-sage) !important;
+}
+
+.dark [class*="hover:bg-[#C8D5C0]"]:hover {
+  background-color: var(--accent-sage-hover) !important;
+}
+
+.dark [class*="fill-[#E8B94A]"] {
+  fill: var(--accent-gold) !important;
+}
+
+.dark [class*="bg-[#1A1A1A]"] {
+  background-color: var(--btn-dark-bg) !important;
+  color: var(--btn-dark-text) !important;
+}
+
+.dark pre,
+.dark code {
+  color: var(--text-main) !important;
+}
+
+.dark [class*="bg-[#E8B94A]/20"] {
+  background-color: rgb(184 134 47 / 0.25) !important;
+}
+
+.dark [class*="bg-[#C8D5C0]/40"] {
+  background-color: rgb(92 107 84 / 0.35) !important;
+}
+
+.dark button:disabled,
+.dark [disabled] {
+  opacity: 0.55 !important;
+}
+
+

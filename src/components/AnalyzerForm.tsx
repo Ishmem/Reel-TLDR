@@ -75,7 +75,6 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
     setStatusMessage('1/3 Fetching Reel video stream via yt-dlp...');
 
     try {
-      // Step simulator for UI feedback
       const timer1 = setTimeout(() => {
         setStatusMessage('2/3 Extracting audio & running Groq Whisper transcription...');
       }, 3000);
@@ -204,58 +203,58 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
   };
 
   return (
-    <div className="bg-[#16191E] rounded-xl border border-[#2A2D35] shadow-xs overflow-hidden">
-      {/* Mode Navigation Tabs */}
-      <div className="flex border-b border-[#2A2D35] bg-[#0F1115] p-1.5 gap-1 overflow-x-auto">
+    <div className="bg-white rounded-2xl border-[2.5px] border-[#1A1A1A] shadow-[4px_4px_0px_#1A1A1A] overflow-hidden">
+      {/* Mode Navigation Tabs (Bordered Pill Switcher) */}
+      <div className="flex border-b-[2.5px] border-[#1A1A1A] bg-[#FAF7F2] p-3 gap-2 overflow-x-auto">
         <button
           type="button"
           onClick={() => { setActiveTab('url'); setErrorMessage(null); }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer border-2 border-[#1A1A1A] ${
             activeTab === 'url'
-              ? 'bg-[#21262E] text-white border border-[#3A414A] shadow-xs'
-              : 'text-[#8E9299] hover:text-white hover:bg-[#21262E]/50'
+              ? 'bg-[#E8B94A] text-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A]'
+              : 'bg-white text-[#1A1A1A] hover:bg-[#F5F1E8] shadow-[1.5px_1.5px_0px_#1A1A1A]'
           }`}
         >
-          <LinkIcon className="w-3.5 h-3.5 text-[#6366F1]" />
-          Single Reel URL
+          <LinkIcon className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span>Single Reel URL</span>
         </button>
 
         <button
           type="button"
           onClick={() => { setActiveTab('upload'); setErrorMessage(null); }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer border-2 border-[#1A1A1A] ${
             activeTab === 'upload'
-              ? 'bg-[#21262E] text-white border border-[#3A414A] shadow-xs'
-              : 'text-[#8E9299] hover:text-white hover:bg-[#21262E]/50'
+              ? 'bg-[#E8B94A] text-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A]'
+              : 'bg-white text-[#1A1A1A] hover:bg-[#F5F1E8] shadow-[1.5px_1.5px_0px_#1A1A1A]'
           }`}
         >
-          <Upload className="w-3.5 h-3.5 text-[#818CF8]" />
-          Direct Video Upload
+          <Upload className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span>Direct Video Upload</span>
         </button>
 
         <button
           type="button"
           onClick={() => { setActiveTab('batch'); setErrorMessage(null); }}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer border-2 border-[#1A1A1A] ${
             activeTab === 'batch'
-              ? 'bg-[#21262E] text-white border border-[#3A414A] shadow-xs'
-              : 'text-[#8E9299] hover:text-white hover:bg-[#21262E]/50'
+              ? 'bg-[#E8B94A] text-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A]'
+              : 'bg-white text-[#1A1A1A] hover:bg-[#F5F1E8] shadow-[1.5px_1.5px_0px_#1A1A1A]'
           }`}
         >
-          <Layers className="w-3.5 h-3.5 text-[#A5B4FC]" />
-          Batch Processing (URLs)
+          <Layers className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span>Batch Processing (URLs)</span>
         </button>
       </div>
 
-      <div className="p-5 md:p-6">
+      <div className="p-6 md:p-7">
         {/* TAB 1: SINGLE URL FORM */}
         {activeTab === 'url' && (
           <form onSubmit={handleUrlSubmit} className="space-y-4">
             <div>
-              <label htmlFor="reel-url-input" className="block text-[11px] font-bold text-[#8E9299] uppercase tracking-wider mb-2">
-                Instagram Reel URL
+              <label htmlFor="reel-url-input" className="block text-xs font-bold text-[#1A1A1A] uppercase tracking-wider mb-2 font-display">
+                Instagram Reel or Post URL
               </label>
-              <div className="relative">
+              <div className="relative flex flex-col sm:flex-row items-stretch gap-2">
                 <input
                   id="reel-url-input"
                   type="url"
@@ -263,24 +262,24 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
                   value={reelUrl}
                   onChange={(e) => setReelUrl(e.target.value)}
                   disabled={isLoading}
-                  className="w-full pl-4 pr-36 py-3 bg-[#0F1115] border border-[#2A2D35] rounded-xl text-sm text-[#E2E4E9] placeholder-[#5C616B] focus:outline-none focus:ring-2 focus:ring-[#6366F1]/30 focus:border-[#6366F1] transition-all"
+                  className="flex-1 pl-4 pr-4 py-3.5 bg-[#FAF7F2] border-2 border-[#1A1A1A] rounded-xl text-sm font-medium text-[#1A1A1A] placeholder-[#777] focus:bg-white focus:outline-none shadow-[2px_2px_0px_#1A1A1A] transition-all"
                   required
                 />
                 <button
                   type="submit"
                   id="btn-analyze-reel"
                   disabled={isLoading || !reelUrl.trim()}
-                  className="absolute right-1.5 top-1.5 bottom-1.5 px-4 bg-[#6366F1] hover:bg-[#5558E6] disabled:bg-[#21262E] disabled:text-[#5C616B] text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:cursor-not-allowed"
+                  className="px-6 py-3.5 bg-[#1A1A1A] hover:bg-[#E8B94A] hover:text-[#1A1A1A] text-white disabled:bg-[#CCCCCC] disabled:text-[#666666] text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all border-2 border-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] hover:shadow-[4px_4px_0px_#1A1A1A] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none cursor-pointer disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Analyzing...
+                      <Loader2 className="w-4 h-4 animate-spin stroke-[2.5]" />
+                      <span>Analyzing...</span>
                     </>
                   ) : (
                     <>
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                      Analyze Reel
+                      <Play className="w-4 h-4 fill-current stroke-[2.5]" />
+                      <span>Analyze Reel</span>
                     </>
                   )}
                 </button>
@@ -288,10 +287,18 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
             </div>
 
             {/* Guidance banner */}
-            <div className="mt-4 p-3.5 bg-[#0F1115] rounded-lg border border-[#2A2D35] text-xs text-[#A1A7B0] flex items-start gap-2.5">
-              <Sparkles className="w-4 h-4 text-[#6366F1] shrink-0 mt-0.5" />
-              <div>
-                <strong className="text-white">Pro Tip:</strong> For automated frame-by-frame visual and audio Whisper speech recognition on any video file, switch to the <button type="button" onClick={() => setActiveTab('upload')} className="text-[#818CF8] underline font-medium hover:text-white cursor-pointer">Direct Video Upload</button> tab to upload your downloaded .mp4 or .mov file.
+            <div className="mt-4 p-4 bg-[#FAF7F2] rounded-xl border-2 border-[#1A1A1A] text-xs text-[#1A1A1A] flex items-start gap-3 shadow-[2px_2px_0px_#1A1A1A]">
+              <Sparkles className="w-4 h-4 text-[#1A1A1A] shrink-0 mt-0.5 stroke-[2.5]" />
+              <div className="leading-relaxed">
+                <strong className="font-bold">Pro Tip:</strong> Supports Instagram Reels and Posts. For offline video files or if Instagram blocks download access, switch to the{' '}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('upload')}
+                  className="font-bold underline text-[#1A1A1A] hover:bg-[#E8B94A] px-1 rounded transition-colors cursor-pointer"
+                >
+                  Direct Video Upload
+                </button>{' '}
+                tab to process your downloaded .mp4 or .mov file immediately.
               </div>
             </div>
           </form>
@@ -299,7 +306,7 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
 
         {/* TAB 2: DIRECT VIDEO UPLOAD */}
         {activeTab === 'upload' && (
-          <form onSubmit={handleUploadSubmit} className="space-y-4">
+          <form onSubmit={handleUploadSubmit} className="space-y-5">
             <input
               ref={fileInputRef}
               type="file"
@@ -320,29 +327,33 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
               onClick={() => fileInputRef.current?.click()}
               className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
                 dragActive
-                  ? 'border-[#6366F1] bg-[#6366F1]/10'
+                  ? 'border-[#1A1A1A] bg-[#E8B94A]/20'
                   : selectedFile
-                  ? 'border-[#10B981]/50 bg-[#10B981]/5'
-                  : 'border-[#2A2D35] bg-[#0F1115] hover:bg-[#21262E]/40 hover:border-[#3A414A]'
+                  ? 'border-[#1A1A1A] bg-[#C8D5C0]/40'
+                  : 'border-[#1A1A1A] bg-[#FAF7F2] hover:bg-white'
               }`}
             >
-              <div className="w-12 h-12 rounded-xl bg-[#21262E] border border-[#2A2D35] flex items-center justify-center mx-auto mb-3 text-stone-300">
-                {selectedFile ? <CheckCircle2 className="w-6 h-6 text-[#10B981]" /> : <FolderOpen className="w-6 h-6 text-[#818CF8]" />}
+              <div className="w-14 h-14 rounded-xl bg-[#E8B94A] border-2 border-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] flex items-center justify-center mx-auto mb-3 text-[#1A1A1A]">
+                {selectedFile ? (
+                  <CheckCircle2 className="w-7 h-7 stroke-[2.5]" />
+                ) : (
+                  <FolderOpen className="w-7 h-7 stroke-[2.5]" />
+                )}
               </div>
 
               {selectedFile ? (
                 <div>
-                  <p className="text-sm font-semibold text-white">{selectedFile.name}</p>
-                  <p className="text-xs text-[#8E9299] mt-0.5">
+                  <p className="text-sm font-bold text-[#1A1A1A]">{selectedFile.name}</p>
+                  <p className="text-xs text-[#555] font-medium mt-1">
                     {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • Click or drop another file to replace
                   </p>
                 </div>
               ) : (
                 <div>
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-bold text-[#1A1A1A]">
                     Drop a Reel video file here, or click to browse
                   </p>
-                  <p className="text-xs text-[#8E9299] mt-1">
+                  <p className="text-xs text-[#555] font-medium mt-1">
                     Supports .mp4, .mov (Max 100MB)
                   </p>
                 </div>
@@ -353,17 +364,17 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
               <button
                 type="submit"
                 disabled={isLoading || !selectedFile}
-                className="px-5 py-2.5 bg-[#6366F1] hover:bg-[#5558E6] disabled:bg-[#21262E] disabled:text-[#5C616B] text-white text-xs font-semibold rounded-lg flex items-center gap-2 transition-all shadow-xs cursor-pointer disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-[#1A1A1A] hover:bg-[#E8B94A] hover:text-[#1A1A1A] text-white disabled:bg-[#CCCCCC] disabled:text-[#666666] text-xs font-bold rounded-xl flex items-center gap-2 transition-all border-2 border-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] hover:shadow-[4px_4px_0px_#1A1A1A] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none cursor-pointer disabled:cursor-not-allowed"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Processing Video...
+                    <Loader2 className="w-4 h-4 animate-spin stroke-[2.5]" />
+                    <span>Processing Video...</span>
                   </>
                 ) : (
                   <>
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    Analyze Uploaded Reel
+                    <Play className="w-4 h-4 fill-current stroke-[2.5]" />
+                    <span>Analyze Uploaded Reel</span>
                   </>
                 )}
               </button>
@@ -375,7 +386,7 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
         {activeTab === 'batch' && (
           <form onSubmit={handleBatchSubmit} className="space-y-4">
             <div>
-              <label htmlFor="batch-urls-input" className="block text-[11px] font-bold text-[#8E9299] uppercase tracking-wider mb-2">
+              <label htmlFor="batch-urls-input" className="block text-xs font-bold text-[#1A1A1A] uppercase tracking-wider mb-2 font-display">
                 Batch Reel URLs (one per line)
               </label>
               <textarea
@@ -385,28 +396,28 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
                 onChange={(e) => setBatchUrlsText(e.target.value)}
                 disabled={isLoading}
                 placeholder="https://www.instagram.com/reel/Cxxxx/&#10;https://www.instagram.com/reel/Cyyyy/&#10;https://www.instagram.com/reel/Czzzz/"
-                className="w-full p-3 bg-[#0F1115] border border-[#2A2D35] rounded-xl text-xs font-mono text-[#E2E4E9] placeholder-[#5C616B] focus:outline-none focus:ring-2 focus:ring-[#6366F1]/30 focus:border-[#6366F1]"
+                className="w-full p-4 bg-[#FAF7F2] border-2 border-[#1A1A1A] rounded-xl text-xs font-mono text-[#1A1A1A] placeholder-[#777] focus:bg-white focus:outline-none shadow-[2px_2px_0px_#1A1A1A]"
               />
             </div>
 
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-[#8E9299]">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <p className="text-xs text-[#555] font-medium">
                 Processes each reel sequentially with individual and combined roll-up summaries.
               </p>
               <button
                 type="submit"
                 disabled={isLoading || !batchUrlsText.trim()}
-                className="px-5 py-2.5 bg-[#6366F1] hover:bg-[#5558E6] disabled:bg-[#21262E] disabled:text-[#5C616B] text-white text-xs font-semibold rounded-lg flex items-center gap-2 transition-all shadow-xs cursor-pointer disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-[#1A1A1A] hover:bg-[#E8B94A] hover:text-[#1A1A1A] text-white disabled:bg-[#CCCCCC] disabled:text-[#666666] text-xs font-bold rounded-xl flex items-center gap-2 transition-all border-2 border-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] hover:shadow-[4px_4px_0px_#1A1A1A] hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none cursor-pointer disabled:cursor-not-allowed shrink-0"
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Running Batch...
+                    <Loader2 className="w-4 h-4 animate-spin stroke-[2.5]" />
+                    <span>Running Batch...</span>
                   </>
                 ) : (
                   <>
-                    <Layers className="w-3.5 h-3.5" />
-                    Run Batch Analysis
+                    <Layers className="w-4 h-4 stroke-[2.5]" />
+                    <span>Run Batch Analysis</span>
                   </>
                 )}
               </button>
@@ -416,13 +427,13 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
 
         {/* Loading Progress State */}
         {isLoading && (
-          <div className="mt-4 p-4 rounded-xl bg-[#21262E] border border-[#2A2D35] text-white flex items-center gap-3 animate-pulse">
-            <Loader2 className="w-5 h-5 animate-spin text-[#818CF8] shrink-0" />
+          <div className="mt-5 p-4 rounded-xl bg-[#E8B94A] border-2 border-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] text-[#1A1A1A] flex items-center gap-3">
+            <Loader2 className="w-5 h-5 animate-spin stroke-[2.5] shrink-0" />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white tracking-wide">
+              <p className="text-xs font-bold tracking-wide">
                 {statusMessage || 'Processing Instagram Reel with Groq AI...'}
               </p>
-              <p className="text-[11px] text-[#8E9299] mt-0.5">
+              <p className="text-[11px] font-medium text-[#1A1A1A] mt-0.5">
                 Executing audio extraction &rarr; Groq Whisper Transcription &rarr; Groq LLM JSON Synthesis
               </p>
             </div>
@@ -431,16 +442,16 @@ export const AnalyzerForm: React.FC<AnalyzerFormProps> = ({
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="mt-4 p-4 rounded-xl bg-rose-950/40 border border-rose-800/60 flex items-start gap-3 text-rose-200">
-            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+          <div className="mt-5 p-4 rounded-xl bg-[#F5C6D6] border-2 border-[#1A1A1A] shadow-[3px_3px_0px_#1A1A1A] flex items-start gap-3 text-[#1A1A1A]">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 stroke-[2.5]" />
             <div className="flex-1 min-w-0 text-xs">
-              <p className="font-semibold text-white">Analysis Notice</p>
-              <p className="mt-0.5 leading-relaxed text-rose-200">{errorMessage}</p>
-              <div className="mt-2 flex items-center gap-2">
+              <p className="font-bold">Analysis Notice</p>
+              <p className="mt-0.5 leading-relaxed font-medium">{errorMessage}</p>
+              <div className="mt-2.5 flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setActiveTab('upload')}
-                  className="px-2.5 py-1 bg-[#21262E] hover:bg-[#2A2D35] text-white rounded font-medium text-[11px] border border-[#3A414A] cursor-pointer"
+                  className="px-3 py-1.5 bg-white text-[#1A1A1A] rounded-lg font-bold text-xs border-2 border-[#1A1A1A] shadow-[2px_2px_0px_#1A1A1A] hover:bg-[#FAF7F2] cursor-pointer"
                 >
                   Upload Video File Directly
                 </button>
