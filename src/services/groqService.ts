@@ -3,7 +3,7 @@ import youtubedl from 'yt-dlp-exec';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { exec } from 'child_process';
+import { exec, spawnSync } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
@@ -339,7 +339,10 @@ export async function ensureYtDlpBinary(): Promise<string | null> {
     // Direct curl download fallback if needed
     try {
       console.log('[GroqService] Fetching standalone yt-dlp binary...');
-      await execAsync(`curl -sL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" -o "${tmpBin}" && chmod +x "${tmpBin}"`);
+      const downloadUrl = isWindows
+        ? 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe'
+        : 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
+      await execAsync(`curl -sL "${downloadUrl}" -o "${tmpBin}" && chmod +x "${tmpBin}"`);
       if (fs.existsSync(tmpBin) && fs.statSync(tmpBin).size > 100000) {
         return tmpBin;
       }
@@ -368,6 +371,172 @@ export function printResolvedYtDlpBinary(): void {
   }
 }
 
+export interface InstagramPostDetails {
+  title: string;
+  description: string;
+  uploader: string;
+  slideCount: number;
+  isCarousel: boolean;
+  slideImages: string[];
+}
+
+export async function extractInstagramPostDetails(
+  url: string,
+  shortcode: string
+): Promise<InstagramPostDetails | null> {
+  const localBin = getLocalYtDlpOverride() || await ensureYtDlpBinary() || 'yt-dlp';
+  let title = '';
+  let description = '';
+  let uploader = '';
+  let slideCount = 1;
+  let isCarousel = false;
+  const slideImages: string[] = [];
+
+  // 1. Query yt-dlp with -J --no-warnings to extract full post metadata
+  try {
+    const res = spawnSync(localBin, [url, '-J', '--no-warnings', '--no-playlist'], {
+      maxBuffer: 15 * 1024 * 1024,
+      timeout: 25000
+    });
+    if (res.stdout && res.stdout.length > 0) {
+      try {
+        const data = JSON.parse(res.stdout.toString());
+        title = data.title || '';
+        description = data.description || '';
+        uploader = data.channel || data.uploader || '';
+        slideCount = data.playlist_count || (Array.isArray(data.entries) ? data.entries.length : 1);
+        if (data._type === 'playlist' || slideCount > 1 || url.includes('/p/')) {
+          isCarousel = true;
+        }
+      } catch (parseErr) {}
+    }
+  } catch (err: any) {
+    console.warn(`[GroqService] yt-dlp metadata extraction note: ${err.message}`);
+  }
+
+  // 2. Fetch captioned embed to get additional caption & slide images if needed
+  try {
+    const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/captioned/`;
+    const embedRes = await fetch(embedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+      },
+      signal: AbortSignal.timeout(8000)
+    });
+
+    if (embedRes.ok) {
+      const html = await embedRes.text();
+      if (!description) {
+        const captionMatch = html.match(/<div class="Caption"[^>]*>([\s\S]*?)<\/div>/i);
+        if (captionMatch) {
+          description = captionMatch[1]
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .trim();
+        }
+      }
+
+      const unescaped = html.replace(/\\\/\\\//g, '//').replace(/\\\//g, '/');
+      const matches = unescaped.match(/https:\/\/scontent[^\s"<>]+/g) || [];
+      const highRes = [...new Set(matches)].filter(u => u.includes('regular_photo') || u.includes('1080x1080') || u.includes('s1080x1080') || u.includes('dst-webp'));
+      if (highRes.length > 0) {
+        slideImages.push(...highRes.slice(0, 10));
+        isCarousel = true;
+        if (slideImages.length > slideCount) {
+          slideCount = slideImages.length;
+        }
+      }
+    }
+  } catch (embedErr: any) {
+    // continue
+  }
+
+  if (!description && !title && slideImages.length === 0) {
+    return null;
+  }
+
+  return {
+    title: title || `Instagram Post by ${uploader || shortcode}`,
+    description,
+    uploader: uploader || 'Instagram Creator',
+    slideCount: Math.max(1, slideCount),
+    isCarousel,
+    slideImages
+  };
+}
+
+export async function analyzeCarouselContentWithGroq(
+  postDetails: InstagramPostDetails,
+  existingCategories?: string[]
+): Promise<ServerReelAnalysis> {
+  const categoryContext = existingCategories && existingCategories.length > 0
+    ? `\nEXISTING CATEGORIES IN USER'S SAVED LIBRARY:\n${existingCategories.map(c => `- "${c}"`).join('\n')}\n\nIMPORTANT CATEGORIZATION RULE:\n- If this post's topic reasonably fits one of the existing categories above, REUSE that exact category name to prevent library fragmentation.\n- If and only if none of the existing categories fit, coin a new, specific, concise category (2-5 words, Title Case, e.g. "Cooking", "Book Recommendations", "Workout & Fitness", "AI Tools & Education").`
+    : `\nCATEGORIZATION INSTRUCTION:\n- Provide a short, human-readable topic label in "category" describing what the content is actually about (2-5 words, Title Case, e.g. "Cooking", "Book Recommendations", "Workout & Fitness", "AI Tools & Education").`;
+
+  const prompt = `Here is the extracted content, slide details, and metadata from an Instagram ${postDetails.isCarousel ? 'Carousel / Multi-Image Post' : 'Post'}:
+
+CREATOR / UPLOADER: ${postDetails.uploader}
+POST TITLE: ${postDetails.title}
+SLIDES COUNT: ${postDetails.slideCount} slides
+${postDetails.slideImages.length > 0 ? `SLIDE IMAGES EXTRACTED: ${postDetails.slideImages.length} images` : ''}
+
+POST CAPTION & CONTENT:
+"""
+${postDetails.description || postDetails.title}
+"""
+${categoryContext}
+
+Please perform a complete content analysis of this Instagram post.
+Extract all key points, list items (if it is a listicle, tool roundup, or multi-step guide), executive summary, topic category, and structure.
+Return strictly a valid JSON object matching this exact schema:
+
+{
+  "summary": "2-4 concise sentences summarizing the post's actual subject matter and primary takeaway.",
+  "is_list_content": true or false,
+  "list_title": "Title of the list (e.g. '7 Practical AI YouTube Creators') or null if not a list",
+  "list_items": ["Item 1", "Item 2", ...],
+  "key_points": ["Key takeaway 1", "Key takeaway 2", "Key takeaway 3"],
+  "has_speech": false,
+  "spoken_content_summary": "N/A - Instagram Carousel / Multi-Image graphic post.",
+  "on_screen_text": ["Key headings, featured items, and slide titles"],
+  "visual_description": "Description of the visual presentation and multi-slide layout",
+  "dominant_mood": "e.g. High Energy / Actionable, Educational / Informative, Resourceful",
+  "category": "Concise topic label (2-5 words, Title Case)",
+  "content_type": "${postDetails.isCarousel ? 'Carousel / Resource Roundup' : 'Graphic / Post'}",
+  "hashtag_suggestions": ["tag1", "tag2", "tag3", "tag4", "tag5"]
+}`;
+
+  const parsed = await queryGroqLLM(prompt, GROQ_SYSTEM_PROMPT);
+
+  const rawCategory = (parsed.category || parsed.content_type || 'General').trim();
+  let cleanCategory = rawCategory;
+  if (existingCategories && existingCategories.length > 0) {
+    const matched = existingCategories.find(c => c.trim().toLowerCase() === cleanCategory.toLowerCase());
+    if (matched) cleanCategory = matched;
+  }
+
+  return {
+    summary: parsed.summary || 'Carousel analysis completed.',
+    is_list_content: Boolean(parsed.is_list_content),
+    list_title: parsed.list_title || (parsed.is_list_content ? 'Key Items' : null),
+    list_items: Array.isArray(parsed.list_items) ? parsed.list_items : [],
+    key_points: Array.isArray(parsed.key_points) && parsed.key_points.length > 0 ? parsed.key_points : ['Key insight extracted from post content.'],
+    has_speech: false,
+    spoken_content_summary: 'N/A - Image carousel / multi-slide graphic post.',
+    on_screen_text: Array.isArray(parsed.on_screen_text) ? parsed.on_screen_text : [],
+    visual_description: parsed.visual_description || `Instagram multi-image carousel post by ${postDetails.uploader} featuring ${postDetails.slideCount} slides.`,
+    dominant_mood: parsed.dominant_mood || 'Educational / Informative',
+    category: cleanCategory,
+    content_type: parsed.content_type || (postDetails.isCarousel ? 'Carousel / Multi-Image Post' : 'Post Content'),
+    hashtag_suggestions: Array.isArray(parsed.hashtag_suggestions) ? parsed.hashtag_suggestions : ['instagram', 'content', 'explore', 'trending']
+  };
+}
+
 export async function analyzeInstagramUrlWithGroq(
   url: string,
   existingCategories?: string[]
@@ -376,7 +545,7 @@ export async function analyzeInstagramUrlWithGroq(
   const cleanUrl = url.trim();
   const shortcode = extractShortcode(cleanUrl);
 
-  // 1. Try downloading with yt-dlp
+  // 1. Try downloading video with yt-dlp
   const tempDir = path.join(os.tmpdir(), `reel_dl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
   let downloadedVideoPath: string | null = null;
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
@@ -420,8 +589,12 @@ export async function analyzeInstagramUrlWithGroq(
       downloadedVideoPath = outputPath;
     }
   } catch (dlErr: any) {
-    const errMsg = dlErr.stderr || dlErr.message || String(dlErr);
-    console.error(`[GroqService] yt-dlp download failed for ${cleanUrl}: ${errMsg.slice(0, 500)}`);
+    let errMsg = dlErr.stderr || dlErr.message || String(dlErr);
+    // Sanitize Python version deprecation warnings so they do not pollute logs
+    errMsg = errMsg.replace(/Deprecated Feature: Support for Python version [^\n]*\n?/gi, '').trim();
+    if (errMsg) {
+      console.warn(`[GroqService] yt-dlp video stream note for ${cleanUrl}: ${errMsg.slice(0, 300)}`);
+    }
   }
 
   // 2. If video was downloaded, run real Groq Whisper + LLM extraction
@@ -449,18 +622,44 @@ export async function analyzeInstagramUrlWithGroq(
     }
   }
 
-  // Clean up temporary directory if download did not succeed
+  // 3. Fallback: If video download was not possible (e.g. carousel / photo post, or video stream restricted),
+  // extract post details, caption, and slide images and analyze with Groq LLM
   try {
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  } catch {}
+    console.log(`[GroqService] Video stream not found or URL is a carousel post. Attempting Instagram post & carousel extraction for ${cleanUrl}...`);
+    const postDetails = await extractInstagramPostDetails(cleanUrl, shortcode);
+    if (postDetails && (postDetails.description || postDetails.title || postDetails.slideImages.length > 0)) {
+      console.log(`[GroqService] Successfully extracted ${postDetails.isCarousel ? 'carousel' : 'post'} metadata (${postDetails.slideCount} slides). Running Groq structuring...`);
+      const analysis = await analyzeCarouselContentWithGroq(postDetails, existingCategories);
+      const textSummary = formatAnalysisTextSummary(analysis, shortcode);
+      return {
+        status: 'SUCCESS',
+        url: cleanUrl,
+        shortcode,
+        provider: 'groq',
+        analysis,
+        text_summary: textSummary,
+        execution_time_ms: Date.now() - startTime,
+        output_files: {
+          json: `analysis_${shortcode}.json`,
+          txt: `summary_${shortcode}.txt`
+        }
+      };
+    }
+  } catch (postErr: any) {
+    console.error(`[GroqService] Post extraction fallback failed for ${cleanUrl}: ${postErr.message}`);
+  } finally {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
+  }
 
-  // 3. Return explicit FAILED status with clear message if download failed
+  // 4. Return explicit FAILED status with clear message if download and carousel fallback failed
   return {
     status: 'FAILED',
     url: cleanUrl,
     shortcode,
     provider: 'groq',
-    error: 'Could not download the video from this URL. Instagram/Facebook may be blocking automated downloads, or the link may be private/expired. Try uploading the video file directly instead.'
+    error: 'Could not download the video or extract carousel content from this URL. The link may be private or expired. Try uploading the video file or image directly instead.'
   };
 }
 

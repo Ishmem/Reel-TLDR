@@ -232,6 +232,8 @@ async function startServer() {
   app.get('/api/python-suite', (req, res) => {
     try {
       const files: Record<string, string> = {
+        'growki_pipeline.py': fs.readFileSync(path.join(process.cwd(), 'growki_pipeline.py'), 'utf-8'),
+        'test_growki_pipeline.py': fs.readFileSync(path.join(process.cwd(), 'test_growki_pipeline.py'), 'utf-8'),
         'reel_analyzer.py': fs.readFileSync(path.join(process.cwd(), 'reel_analyzer.py'), 'utf-8'),
         'requirements.txt': fs.readFileSync(path.join(process.cwd(), 'requirements.txt'), 'utf-8'),
         'analyzer/schemas.py': fs.readFileSync(path.join(process.cwd(), 'analyzer', 'schemas.py'), 'utf-8'),
