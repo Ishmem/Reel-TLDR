@@ -470,6 +470,81 @@ export async function extractInstagramPostDetails(
   };
 }
 
+export async function analyzeImageWithGroqVision(
+  imageUrl: string,
+  slideNumber: number
+): Promise<string> {
+  const groq = getGroqClient();
+  const visionModels = [
+    'qwen/qwen3.8-27b',
+    'qwen/qwen3.6-27b',
+    'meta-llama/llama-4-scout-17b-16e-instruct',
+    'meta-llama/llama-4-maverick-17b-128e-instruct',
+    'llama-3.2-11b-vision-preview'
+  ];
+
+  // If imageUrl is an external web link, preload buffer as base64 data URI to avoid external CDN 403 blocks
+  let effectiveUrl = imageUrl;
+  if (!effectiveUrl.startsWith('data:')) {
+    try {
+      const res = await fetch(imageUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (res.ok) {
+        const buffer = Buffer.from(await res.arrayBuffer());
+        if (buffer.length > 50) {
+          const contentType = res.headers.get('content-type') || 'image/jpeg';
+          const mime = contentType.includes('png') ? 'image/png' : 'image/jpeg';
+          effectiveUrl = `data:${mime};base64,${buffer.toString('base64')}`;
+        }
+      }
+    } catch (fetchErr: any) {
+      console.warn(`[GroqService] Direct image buffer preload note for slide ${slideNumber}: ${fetchErr.message}`);
+    }
+  }
+
+  let lastError: any = null;
+
+  for (const model of visionModels) {
+    try {
+      const response = await groq.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Extract ALL text, headings, and instructions visible in this image exactly as written. If this is a step/tip/setting from a tutorial or listicle, include the full instruction text, not just the title.'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: effectiveUrl
+                }
+              }
+            ]
+          }
+        ],
+        temperature: 0.1,
+        max_tokens: 1200
+      });
+
+      const extracted = response.choices[0]?.message?.content || '';
+      return extracted.trim();
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`[GroqService] Vision model ${model} failed for slide ${slideNumber}: ${err.message}. Trying next model...`);
+    }
+  }
+
+  throw lastError || new Error(`Failed to analyze slide image ${slideNumber} with Groq Vision.`);
+}
+
 export async function analyzeCarouselContentWithGroq(
   postDetails: InstagramPostDetails,
   existingCategories?: string[]
@@ -478,18 +553,67 @@ export async function analyzeCarouselContentWithGroq(
     ? `\nEXISTING CATEGORIES IN USER'S SAVED LIBRARY:\n${existingCategories.map(c => `- "${c}"`).join('\n')}\n\nIMPORTANT CATEGORIZATION RULE:\n- If this post's topic reasonably fits one of the existing categories above, REUSE that exact category name to prevent library fragmentation.\n- If and only if none of the existing categories fit, coin a new, specific, concise category (2-5 words, Title Case, e.g. "Cooking", "Book Recommendations", "Workout & Fitness", "AI Tools & Education").`
     : `\nCATEGORIZATION INSTRUCTION:\n- Provide a short, human-readable topic label in "category" describing what the content is actually about (2-5 words, Title Case, e.g. "Cooking", "Book Recommendations", "Workout & Fitness", "AI Tools & Education").`;
 
+  // 1. Loop through postDetails.slideImages (capped at 10) and analyze each with Groq Vision
+  const slideImages = (postDetails.slideImages || []).slice(0, 10);
+  const slideResults: { slideNumber: number; text: string }[] = [];
+  const concurrency = 2;
+
+  if (slideImages.length > 0) {
+    console.log(`[GroqService] Analyzing ${slideImages.length} carousel slide images with Groq Vision...`);
+    for (let i = 0; i < slideImages.length; i += concurrency) {
+      const chunk = slideImages.slice(i, i + concurrency);
+      const chunkPromises = chunk.map(async (imageUrl, idx) => {
+        const slideNumber = i + idx + 1;
+        try {
+          const extractedText = await analyzeImageWithGroqVision(imageUrl, slideNumber);
+          return { slideNumber, text: extractedText };
+        } catch (err: any) {
+          console.warn(`[GroqService] Warning: Failed to analyze slide image ${slideNumber}: ${err.message}`);
+          return { slideNumber, text: '' };
+        }
+      });
+
+      const results = await Promise.all(chunkPromises);
+      slideResults.push(...results);
+
+      // Short delay between batches to respect rate limits
+      if (i + concurrency < slideImages.length) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+  }
+
+  // 2. Concatenate results into a labeled block:
+  // SLIDE 1 CONTENT: <extracted text>
+  // SLIDE 2 CONTENT: <extracted text>
+  const validSlides = slideResults.filter(s => s.text && s.text.trim().length > 0);
+  const labeledSlideBlocks = validSlides.map(s => `SLIDE ${s.slideNumber} CONTENT:\n${s.text.trim()}`);
+  const concatenatedSlideContent = labeledSlideBlocks.join('\n\n');
+
+  const slideContentSection = concatenatedSlideContent
+    ? `\nSLIDE-BY-SLIDE CONTENT (EXTRACTED DIRECTLY FROM CAROUSEL SLIDE IMAGES VIA VISION AI):\n"""\n${concatenatedSlideContent}\n"""`
+    : (slideImages.length > 0
+        ? `\nSLIDE IMAGES EXTRACTED: ${slideImages.length} images (OCR/Vision could not read text from slides)`
+        : '');
+
   const prompt = `Here is the extracted content, slide details, and metadata from an Instagram ${postDetails.isCarousel ? 'Carousel / Multi-Image Post' : 'Post'}:
 
 CREATOR / UPLOADER: ${postDetails.uploader}
 POST TITLE: ${postDetails.title}
 SLIDES COUNT: ${postDetails.slideCount} slides
-${postDetails.slideImages.length > 0 ? `SLIDE IMAGES EXTRACTED: ${postDetails.slideImages.length} images` : ''}
+${slideContentSection}
 
-POST CAPTION & CONTENT:
+POST CAPTION (USE FOR CONTEXT / FRAMING ONLY):
 """
 ${postDetails.description || postDetails.title}
 """
 ${categoryContext}
+
+CRITICAL ACCURACY INSTRUCTIONS FOR CAROUSEL / MULTI-SLIDE CONTENT:
+1. PRIMARY SOURCE OF TRUTH: Extract "list_items" and "key_points" PRIMARILY from the SLIDE-BY-SLIDE CONTENT block above (the real per-slide text, step titles, settings paths, and instructions). Use the caption only for framing/context — do NOT guess or invent vague placeholder items from the caption alone.
+2. CONCRETE TUTORIAL / LISTICLE DETAILS: If this post is a tutorial, tips guide, or settings walkthrough, extract the exact concrete instructions and settings paths as written on each slide (e.g. "Kill the Glass Renderer — Settings > Accessibility > Display & Text Size > turn on Reduce Transparency"), NOT vague placeholder summaries (e.g. do NOT output generic phrases like "Setting 1 (Display/Motion)").
+3. ON-SCREEN TEXT EXTRACTION: Populate "on_screen_text" with the actual extracted headings, featured steps, setting paths, and key text verbatim from each slide image.
+4. If a slide contains a specific recommendation, app name, setting, or tip, ensure each distinct item corresponds to an entry in "list_items".
 
 Please perform a complete content analysis of this Instagram post.
 Extract all key points, list items (if it is a listicle, tool roundup, or multi-step guide), executive summary, topic category, and structure.
@@ -498,12 +622,12 @@ Return strictly a valid JSON object matching this exact schema:
 {
   "summary": "2-4 concise sentences summarizing the post's actual subject matter and primary takeaway.",
   "is_list_content": true or false,
-  "list_title": "Title of the list (e.g. '7 Practical AI YouTube Creators') or null if not a list",
-  "list_items": ["Item 1", "Item 2", ...],
+  "list_title": "Title of the list (e.g. '7 Practical AI YouTube Creators' or 'Speed-Up Settings') or null if not a list",
+  "list_items": ["Item 1 (Title — Detailed instruction/setting)", "Item 2 (Title — Detailed instruction/setting)", ...],
   "key_points": ["Key takeaway 1", "Key takeaway 2", "Key takeaway 3"],
   "has_speech": false,
   "spoken_content_summary": "N/A - Instagram Carousel / Multi-Image graphic post.",
-  "on_screen_text": ["Key headings, featured items, and slide titles"],
+  "on_screen_text": ["Actual extracted headings, instructions, and text per slide"],
   "visual_description": "Description of the visual presentation and multi-slide layout",
   "dominant_mood": "e.g. High Energy / Actionable, Educational / Informative, Resourceful",
   "category": "Concise topic label (2-5 words, Title Case)",
@@ -520,15 +644,22 @@ Return strictly a valid JSON object matching this exact schema:
     if (matched) cleanCategory = matched;
   }
 
+  // Fallback for on_screen_text if LLM omitted it despite having slide content
+  const extractedOnScreenText = Array.isArray(parsed.on_screen_text) && parsed.on_screen_text.length > 0
+    ? parsed.on_screen_text
+    : (validSlides.length > 0
+        ? validSlides.map(s => `Slide ${s.slideNumber}: ${s.text.split('\n')[0].slice(0, 100)}`)
+        : []);
+
   return {
     summary: parsed.summary || 'Carousel analysis completed.',
-    is_list_content: Boolean(parsed.is_list_content),
+    is_list_content: Boolean(parsed.is_list_content || (parsed.list_items && parsed.list_items.length > 0)),
     list_title: parsed.list_title || (parsed.is_list_content ? 'Key Items' : null),
     list_items: Array.isArray(parsed.list_items) ? parsed.list_items : [],
     key_points: Array.isArray(parsed.key_points) && parsed.key_points.length > 0 ? parsed.key_points : ['Key insight extracted from post content.'],
     has_speech: false,
     spoken_content_summary: 'N/A - Image carousel / multi-slide graphic post.',
-    on_screen_text: Array.isArray(parsed.on_screen_text) ? parsed.on_screen_text : [],
+    on_screen_text: extractedOnScreenText,
     visual_description: parsed.visual_description || `Instagram multi-image carousel post by ${postDetails.uploader} featuring ${postDetails.slideCount} slides.`,
     dominant_mood: parsed.dominant_mood || 'Educational / Informative',
     category: cleanCategory,
