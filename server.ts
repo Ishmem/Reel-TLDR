@@ -4,15 +4,18 @@ import fs from 'fs';
 import os from 'os';
 import { spawn } from 'child_process';
 import multer from 'multer';
-import open from 'open';
-import { createServer as createViteServer } from 'vite';
 import {
   analyzeVideoWithGroq,
   formatAnalysisTextSummary,
   analyzeInstagramUrlWithGroq,
   processBatchReelsWithGroq,
   printResolvedYtDlpBinary
-} from './src/services/groqService.js';
+} from './src/services/groqService.ts';
+import {
+  analyzeInstagramUrl,
+  analyzeVideoWithGemini,
+  processBatchReels
+} from './src/services/geminiService.ts';
 
 const upload = multer({
   dest: path.join(os.tmpdir(), 'reel_uploads'),
@@ -85,10 +88,13 @@ async function startServer() {
 
   // API Routes
   app.get('/api/health', (req, res) => {
+    const hasGroqKey = Boolean(process.env.GROQ_API_KEY);
+    const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY);
     res.json({
       status: 'ok',
-      hasGroqKey: Boolean(process.env.GROQ_API_KEY),
-      provider: 'groq',
+      hasGroqKey,
+      hasGeminiKey,
+      provider: hasGroqKey ? 'groq' : (hasGeminiKey ? 'gemini' : 'none'),
       timestamp: new Date().toISOString()
     });
   });
@@ -106,27 +112,51 @@ async function startServer() {
       ? existingCategories.filter((c: any) => typeof c === 'string' && c.trim())
       : undefined;
 
-    console.log(`[API] Received Groq analysis request for URL: ${cleanUrl} (Existing categories count: ${categoriesList?.length || 0})`);
+    console.log(`[API] Received analysis request for URL: ${cleanUrl} (Existing categories count: ${categoriesList?.length || 0})`);
 
-    try {
-      const result = await analyzeInstagramUrlWithGroq(cleanUrl, categoriesList);
-      if (result.status === 'FAILED') {
-        return res.status(422).json(result);
+    // 1. Try Groq if GROQ_API_KEY is configured
+    if (process.env.GROQ_API_KEY) {
+      try {
+        console.log('[API] Attempting analysis with Groq...');
+        const result = await analyzeInstagramUrlWithGroq(cleanUrl, categoriesList);
+        if (result.status === 'SUCCESS') {
+          return res.json(result);
+        }
+        console.warn('[API] Groq returned non-success, attempting Gemini fallback...');
+      } catch (err: any) {
+        console.warn('[API] Groq analysis threw exception, attempting Gemini fallback:', err.message);
       }
-      return res.json(result);
-    } catch (err: any) {
-      console.error('[API] Exception in /api/analyze-reel:', err);
-      return res.status(500).json({
-        status: 'FAILED',
-        url: cleanUrl,
-        provider: 'groq',
-        error: err.message || 'Internal server error during Groq analysis.'
-      });
     }
+
+    // 2. Fall back to Gemini (injected automatically in Google AI Studio)
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        console.log('[API] Executing analysis with Gemini fallback...');
+        const result = await analyzeInstagramUrl(cleanUrl, 'gemini', undefined, categoriesList);
+        if (result.status === 'FAILED') {
+          return res.status(422).json(result);
+        }
+        return res.json(result);
+      } catch (geminiErr: any) {
+        console.error('[API] Gemini analysis error:', geminiErr);
+        return res.status(500).json({
+          status: 'FAILED',
+          url: cleanUrl,
+          provider: 'gemini',
+          error: geminiErr.message || 'Internal server error during Gemini analysis.'
+        });
+      }
+    }
+
+    return res.status(500).json({
+      status: 'FAILED',
+      url: cleanUrl,
+      error: 'Neither GROQ_API_KEY nor GEMINI_API_KEY is configured on this server.'
+    });
   });
 
-  // Direct video file upload analysis endpoint
-  app.post('/api/analyze-upload', upload.single('video'), async (req, res) => {
+  // Direct video file upload analysis endpoint (supporting both route names)
+  const handleUploadAnalysis = async (req: express.Request, res: express.Response) => {
     if (!req.file) {
       return res.status(400).json({ error: 'No video file uploaded.' });
     }
@@ -143,32 +173,64 @@ async function startServer() {
       } catch {}
     }
 
-    console.log(`[API] Received uploaded video for Groq processing: ${req.file.originalname} (${req.file.size} bytes)`);
-
+    console.log(`[API] Received uploaded video for processing: ${req.file.originalname} (${req.file.size} bytes)`);
     const startTime = Date.now();
-    try {
-      // Groq Whisper audio extraction & high-speed LLM analysis
-      const analysis = await analyzeVideoWithGroq(videoFilePath, categoriesList);
-      const textSummary = formatAnalysisTextSummary(analysis, baseName);
-      const executionTime = Date.now() - startTime;
 
-      return res.json({
-        status: 'SUCCESS',
-        shortcode: baseName,
-        provider: 'groq',
-        analysis,
-        text_summary: textSummary,
-        execution_time_ms: executionTime,
-        output_files: {
-          json: `analysis_${baseName}.json`,
-          txt: `summary_${baseName}.txt`
+    try {
+      // Try Groq Whisper audio extraction & LLM analysis if available
+      if (process.env.GROQ_API_KEY) {
+        try {
+          const analysis = await analyzeVideoWithGroq(videoFilePath, categoriesList);
+          const textSummary = formatAnalysisTextSummary(analysis, baseName);
+          const executionTime = Date.now() - startTime;
+
+          return res.json({
+            status: 'SUCCESS',
+            shortcode: baseName,
+            provider: 'groq',
+            analysis,
+            text_summary: textSummary,
+            execution_time_ms: executionTime,
+            output_files: {
+              json: `analysis_${baseName}.json`,
+              txt: `summary_${baseName}.txt`
+            }
+          });
+        } catch (groqErr: any) {
+          console.warn('[API] Groq upload analysis note, falling back to Gemini:', groqErr.message);
         }
-      });
-    } catch (err: any) {
-      console.error('[API] Error in /api/analyze-upload:', err);
+      }
+
+      // Fall back to Gemini Multimodal analysis
+      if (process.env.GEMINI_API_KEY) {
+        console.log('[API] Processing uploaded video with Gemini multimodal engine...');
+        const analysis = await analyzeVideoWithGemini(videoFilePath, req.file.mimetype || 'video/mp4', categoriesList);
+        const textSummary = formatAnalysisTextSummary(analysis as any, baseName);
+        const executionTime = Date.now() - startTime;
+
+        return res.json({
+          status: 'SUCCESS',
+          shortcode: baseName,
+          provider: 'gemini',
+          analysis,
+          text_summary: textSummary,
+          execution_time_ms: executionTime,
+          output_files: {
+            json: `analysis_${baseName}.json`,
+            txt: `summary_${baseName}.txt`
+          }
+        });
+      }
+
       return res.status(500).json({
         status: 'FAILED',
-        error: err.message || 'Error processing uploaded video with Groq.'
+        error: 'Neither GROQ_API_KEY nor GEMINI_API_KEY is configured on this server.'
+      });
+    } catch (err: any) {
+      console.error('[API] Error in video upload analysis:', err);
+      return res.status(500).json({
+        status: 'FAILED',
+        error: err.message || 'Error processing uploaded video.'
       });
     } finally {
       // Guaranteed cleanup of uploaded temp video file
@@ -180,10 +242,13 @@ async function startServer() {
         console.error('[API] Cleanup warning:', cleanErr);
       }
     }
-  });
+  };
 
-  // Batch analysis endpoint
-  app.post('/api/batch-analyze', upload.single('batchFile'), async (req, res) => {
+  app.post('/api/analyze-upload', upload.single('video'), handleUploadAnalysis);
+  app.post('/api/upload-video', upload.single('video'), handleUploadAnalysis);
+
+  // Batch analysis endpoint (supporting both route names)
+  const handleBatchAnalysis = async (req: express.Request, res: express.Response) => {
     let urls: string[] = [];
 
     if (req.file) {
@@ -212,21 +277,39 @@ async function startServer() {
       } catch {}
     }
 
-    // Limit to max 10 reels per batch in web interface to avoid gateway timeouts
     const limitedUrls = urls.slice(0, 10);
-    console.log(`[API] Starting Groq batch analysis for ${limitedUrls.length} URLs`);
+    console.log(`[API] Starting batch analysis for ${limitedUrls.length} URLs`);
 
     try {
-      const batchResult = await processBatchReelsWithGroq(limitedUrls, categoriesList);
-      return res.json(batchResult);
+      if (process.env.GROQ_API_KEY) {
+        try {
+          const batchResult = await processBatchReelsWithGroq(limitedUrls, categoriesList);
+          return res.json(batchResult);
+        } catch (groqErr: any) {
+          console.warn('[API] Groq batch analysis failed, trying Gemini:', groqErr.message);
+        }
+      }
+
+      if (process.env.GEMINI_API_KEY) {
+        const batchResult = await processBatchReels(limitedUrls, 'gemini', categoriesList);
+        return res.json(batchResult);
+      }
+
+      return res.status(500).json({
+        status: 'FAILED',
+        error: 'Neither GROQ_API_KEY nor GEMINI_API_KEY is available.'
+      });
     } catch (err: any) {
       console.error('[API] Batch analysis error:', err);
       return res.status(500).json({
         status: 'FAILED',
-        error: err.message || 'Error executing batch analysis with Groq.'
+        error: err.message || 'Error executing batch analysis.'
       });
     }
-  });
+  };
+
+  app.post('/api/batch-analyze', upload.single('batchFile'), handleBatchAnalysis);
+  app.post('/api/analyze-batch', upload.single('batchFile'), handleBatchAnalysis);
 
   // Get Python code files for inspection or copy
   app.get('/api/python-suite', (req, res) => {
@@ -257,41 +340,30 @@ async function startServer() {
     });
   });
 
-  // Vite middleware for development / static serving in production
-  if (process.env.NODE_ENV !== 'production') {
+  // Production vs Dev static serving
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+  const isProduction = process.env.NODE_ENV === 'production' || (hasDist && process.env.NODE_ENV !== 'development');
+
+  if (isProduction && hasDist) {
+    console.log(`[Server] Serving production static bundle from ${distPath}`);
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  } else {
+    console.log('[Server] Mounting Vite dev middleware...');
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[Server] Instagram Reel Content Analyzer running on http://0.0.0.0:${PORT}`);
     printResolvedYtDlpBinary();
-
-    // Auto-open default browser when not in a cloud/production environment (Render/Cloud Run have no display)
-    const isCloudEnv = Boolean(
-      process.env.K_SERVICE ||
-      process.env.RENDER ||
-      process.env.CI ||
-      process.env.DYNO ||
-      process.env.FLY_APP_NAME ||
-      process.env.RAILWAY_ENVIRONMENT
-    );
-    const shouldOpenBrowser = Boolean(process.env.PKG_STANDALONE) || (process.env.NODE_ENV !== 'production' && !isCloudEnv);
-
-    if (shouldOpenBrowser) {
-      open(`http://localhost:${PORT}`).catch(() => {
-        // Silently catch error if desktop browser/display is unavailable
-      });
-    }
   });
 }
 

@@ -98,7 +98,7 @@ async function generateContentWithRetryAndFallback(
     contents: any;
     config: any;
   },
-  candidateModels: string[] = ['gemini-3.7-flash', 'gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.1-pro-preview']
+  candidateModels: string[] = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-pro']
 ) {
   let lastError: any = null;
 

@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  reel-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reel-analyzer-app
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    volumes:
+      - ./outputs:/app/outputs
+    restart: unless-stopped
