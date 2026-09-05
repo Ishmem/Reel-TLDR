@@ -1,8 +1,19 @@
+export interface DetailedListItem {
+  number: number;
+  title: string;
+  how_to?: string;
+  steps?: string[];
+  explanation?: string;
+  navigation_path?: string;
+  impact?: string;
+}
+
 export interface ReelAnalysisData {
   summary: string;
   is_list_content: boolean;
   list_title: string | null;
   list_items: string[];
+  detailed_list_items?: DetailedListItem[];
   key_points: string[];
   has_speech: boolean;
   spoken_content_summary: string;
@@ -22,6 +33,7 @@ export interface SavedReel {
   summary: string;
   key_points: string[];
   list_items: string[];
+  detailed_list_items?: DetailedListItem[];
   list_title?: string | null;
   dominant_mood: string;
   content_type?: string;

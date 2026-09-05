@@ -178,10 +178,10 @@ export default function App() {
           </div>
         </div>
 
-        {/* TAB 1: INTERACTIVE ANALYZER */}
+        {/* TAB 1: INTERACTIVE ANALYZER (Merged Single-Card Architecture) */}
         {activeTab === 'analyzer' && (
-          <div className="space-y-8">
-            {/* Input Form Area */}
+          <div className="space-y-6">
+            {/* Unified Input + Results Container (Merged Blue & Red Squares) */}
             <AnalyzerForm
               onAnalysisComplete={handleAnalysisComplete}
               onBatchComplete={handleBatchComplete}
@@ -189,15 +189,17 @@ export default function App() {
               setIsLoading={setIsLoading}
               statusMessage={statusMessage}
               setStatusMessage={setStatusMessage}
-            />
-
-            {/* Results Display Area */}
-            {currentResult && (
-              <AnalysisResultView
-                result={currentResult}
-                onReset={handleReset}
-              />
-            )}
+              currentResult={currentResult}
+              onReset={handleReset}
+            >
+              {currentResult && (
+                <AnalysisResultView
+                  result={currentResult}
+                  onReset={handleReset}
+                  isEmbedded={true}
+                />
+              )}
+            </AnalyzerForm>
 
             {currentBatch && (
               <BatchResultView
